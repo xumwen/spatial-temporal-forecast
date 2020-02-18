@@ -39,7 +39,7 @@ epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
 
-def train_epoch(training_input, training_target, batch_size):
+def train_epoch(training_input, training_target, batch_size, mod = 'train'):
     """
     Trains one epoch with the given data.
     :param training_input: Training inputs of shape (num_samples, num_nodes,
@@ -53,7 +53,10 @@ def train_epoch(training_input, training_target, batch_size):
 
     epoch_training_losses = []
     for i in range(0, training_input.shape[0], batch_size):
-        net.train()
+        if mod == 'train':
+            net.train()
+        else:
+            net.eval()
         optimizer.zero_grad()
 
         indices = permutation[i:i + batch_size]
@@ -63,10 +66,11 @@ def train_epoch(training_input, training_target, batch_size):
         
         out = net(A_wave, X_batch)
         loss = loss_criterion(out, y_batch)
-        if i / batch_size % 100 == 0:
-            print('After training %d batches, loss = %lf' % (i / batch_size, loss.item()))
-        loss.backward()
-        optimizer.step()
+        if mod == 'train':
+            loss.backward()
+            optimizer.step()
+            if i / batch_size % 10 == 0:
+                print('After training %d batches, loss = %lf' % (i / batch_size, loss.item()))
         epoch_training_losses.append(loss.detach().cpu().numpy())
     return sum(epoch_training_losses)/len(epoch_training_losses)
 
@@ -75,7 +79,7 @@ if __name__ == '__main__':
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
     print("model:", args.model)
-    torch.manual_seed(11)
+    torch.manual_seed(7)
 
     A, X, means, stds = load_metr_la_data()
 
@@ -110,33 +114,27 @@ if __name__ == '__main__':
     validation_losses = []
     validation_maes = []
     for epoch in range(epochs):
-        print('=' * 50, 'epoch %d'%(epoch+1), '=' * 50)
-        loss = train_epoch(training_input, training_target,
-                           batch_size=batch_size)
+        print('=' * 30, 'epoch %d'%(epoch+1), '=' * 30)
+        loss = train_epoch(training_input, 
+                           training_target,
+                           batch_size=batch_size,
+                           mod='train')
         training_losses.append(loss)
 
         # Run validation
-        with torch.no_grad():
-            net.eval()
-            val_input = val_input.to(device=args.device)
-            val_target = val_target.to(device=args.device)
-
-            out = net(A_wave, val_input)
-            val_loss = loss_criterion(out, val_target).to(device="cpu")
-            validation_losses.append(np.asscalar(val_loss.detach().numpy()))
-
-            out_unnormalized = out.detach().cpu().numpy()*stds[0]+means[0]
-            target_unnormalized = val_target.detach().cpu().numpy()*stds[0]+means[0]
-            mae = np.mean(np.absolute(out_unnormalized - target_unnormalized))
-            validation_maes.append(mae)
-
-            out = None
+        with torch.no_grad():  
+            val_loss = train_epoch(val_input,
+                                   val_target,
+                                   batch_size=batch_size,
+                                   mod='eval')
+            validation_losses.append(val_loss)
+            
             val_input = val_input.to(device="cpu")
             val_target = val_target.to(device="cpu")
 
-        print("Training loss: {}".format(training_losses[-1]))
-        print("Validation loss: {}".format(validation_losses[-1]))
-        print("Validation MAE: {}".format(validation_maes[-1]))
+        print("Training loss: {:.4f}".format(training_losses[-1]))
+        print("Validation loss: {:.4f}".format(validation_losses[-1]))
+        # print("Validation MAE: {}".format(validation_maes[-1]))
         plt.plot(training_losses, label="training loss")
         plt.plot(validation_losses, label="validation loss")
         plt.legend()
@@ -146,4 +144,4 @@ if __name__ == '__main__':
         if not os.path.exists(checkpoint_path):
             os.makedirs(checkpoint_path)
         with open("checkpoints/losses.pk", "wb") as fd:
-            pk.dump((training_losses, validation_losses, validation_maes), fd)
+            pk.dump((training_losses, validation_losses), fd)

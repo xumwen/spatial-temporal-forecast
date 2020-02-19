@@ -2,7 +2,30 @@ import os
 import zipfile
 import numpy as np
 import torch
-
+from math import sin, asin, cos, radians, sqrt
+ 
+EARTH_RADIUS=6371           # radius of the earth，6371km
+ 
+def hav(theta):
+    s = sin(theta / 2)
+    return s * s
+ 
+def calculate_distance_by_haversine(lon1, lat1, lon2, lat2):
+    '''
+    Use haversine formula to calculate distance between two points by longtude and latitude.
+    The output is in kilometers
+    '''
+    lat1 = radians(lat1)
+    lat2 = radians(lat2)
+    lon1 = radians(lon1)
+    lon2 = radians(lon2)
+ 
+    dlon = abs(lon1 - lon2)
+    dlat = abs(lat1 - lat2)
+    h = hav(dlat) + cos(lat1) * cos(lat2) * hav(dlon)
+    distance = 2 * EARTH_RADIUS * asin(sqrt(h))
+ 
+    return distance
 
 def load_metr_la_data():
     if (not os.path.isfile("data/adj_mat.npy")

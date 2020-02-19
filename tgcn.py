@@ -21,11 +21,10 @@ class GCNBlock(nn.Module):
         :return: Output data of shape (batch_size, num_nodes,
         num_timesteps_out, num_features=out_channels).
         """
-        bn1 = self.batch_norm(X)
-        gcn1 = torch.einsum("ij,jklm->kilm", [A_hat, bn1.permute(1, 0, 2, 3)])
+        bn = self.batch_norm(X)
+        gcn1 = torch.einsum("ij,jklm->kilm", [A_hat, bn.permute(1, 0, 2, 3)])
         relu1 = F.relu(torch.matmul(gcn1, self.Theta1))
-        bn2 = self.batch_norm(relu1)
-        gcn2 = torch.einsum("ij,jklm->kilm", [A_hat, bn2.permute(1, 0, 2, 3)])
+        gcn2 = torch.einsum("ij,jklm->kilm", [A_hat, relu1.permute(1, 0, 2, 3)])
         output = torch.sigmoid(torch.matmul(gcn2, self.Theta2))
         
         return output
@@ -74,7 +73,7 @@ class TGCN(nn.Module):
         output by the network.
         """
         super(TGCN, self).__init__()
-        #self.input_linear = nn.Linear(num_features, hidden_size)
+        # self.input_linear = nn.Linear(num_features, hidden_size)
         self.gcn = GCNBlock(in_channels = num_features, spatial_channels = hidden_size,
                                 num_nodes = num_nodes)
         self.gru = GRUBlock(input_size = hidden_size, hidden_size = hidden_size,
@@ -88,7 +87,7 @@ class TGCN(nn.Module):
         :param A_hat: Normalized adjacency matrix.
         """
         out1 = self.gcn(X, A_hat)
-        #out1 = self.input_linear(X)
+        # out1 = self.input_linear(X)
         out2 = self.gru(out1)
         out3 = self.linear(out2).squeeze(dim = 3)
         return out3

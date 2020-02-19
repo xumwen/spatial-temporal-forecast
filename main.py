@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 
+from torch.nn.parallel.data_parallel import data_parallel
+
 from stgcn import STGCN
 from tgcn import TGCN
 from preprocess import generate_dataset, load_metr_la_data, get_normalized_adj
@@ -50,7 +52,7 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
     :return: Average loss for this epoch.
     """
     permutation = torch.randperm(training_input.shape[0])
-
+        
     epoch_training_losses = []
     for i in range(0, training_input.shape[0], batch_size):
         if mod == 'train':
@@ -63,8 +65,8 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
         X_batch, y_batch = training_input[indices], training_target[indices]
         X_batch = X_batch.to(device=args.device)
         y_batch = y_batch.to(device=args.device)
-        
-        out = net(A_wave, X_batch)
+    
+        out = data_parallel(net,X_batch)
         loss = loss_criterion(out, y_batch)
         if mod == 'train':
             loss.backward()
@@ -74,7 +76,16 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
         epoch_training_losses.append(loss.detach().cpu().numpy())
     return sum(epoch_training_losses)/len(epoch_training_losses)
 
+class WarpperNet(nn.Module):
+    def __init__(self, net, A):
+        super(WarpperNet, self).__init__()
+        self.net = net
+        # self.A = A
+        self.register_buffer("A_wave", A)
 
+    def forward(self, X):
+        return self.net(self.A_wave, X)
+        
 if __name__ == '__main__':
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
@@ -102,10 +113,12 @@ if __name__ == '__main__':
 
     A_wave = torch.from_numpy(get_normalized_adj(A)).to(device=args.device)
 
-    net = model(A_wave.shape[0],
+    basenet = model(A_wave.shape[0],
                 training_input.shape[3],
                 num_timesteps_input,
                 num_timesteps_output).to(device=args.device)
+    
+    net = WarpperNet(basenet, A_wave)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
     loss_criterion = nn.MSELoss()
@@ -135,10 +148,10 @@ if __name__ == '__main__':
         print("Training loss: {:.4f}".format(training_losses[-1]))
         print("Validation loss: {:.4f}".format(validation_losses[-1]))
         # print("Validation MAE: {}".format(validation_maes[-1]))
-        plt.plot(training_losses, label="training loss")
-        plt.plot(validation_losses, label="validation loss")
-        plt.legend()
-        plt.show()
+        # plt.plot(training_losses, label="training loss")
+        # plt.plot(validation_losses, label="validation loss")
+        # plt.legend()
+        # plt.show()
 
         checkpoint_path = "checkpoints/"
         if not os.path.exists(checkpoint_path):

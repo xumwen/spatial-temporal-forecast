@@ -18,6 +18,7 @@ def load_nyc_sharing_bike_data(directory="data/NYC-Sharing-Bike"):
             parse_nyc_sharing_bike_data(directory, "/201307-201402-citibike-tripdata.zip")
 
     A = np.load(directory + "/adj_mat.npy")
+    A = A.astype(np.float32)
     # X's shape is (num_nodes, num_features, num_sequence)
     X = np.load(directory + "/node_values.npy")
     X = X.astype(np.float32)
@@ -120,7 +121,7 @@ def calculate_distance(lon1, lat1, lon2, lat2):
     Use haversine formula to calculate distance between two points by longtude and latitude.
     The output is in kilometers
     '''
-    EARTH_RADIUS=6371           # 地球平均半径，6371km
+    EARTH_RADIUS=6371           # radius of the earth is 6371km
     lat1 = radians(lat1)
     lat2 = radians(lat2)
     lon1 = radians(lon1)

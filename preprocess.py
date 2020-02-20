@@ -2,19 +2,125 @@ import os
 import zipfile
 import numpy as np
 import torch
+import pandas as pd
+import datetime
+import calendar
+from dateutil.relativedelta import relativedelta
 from math import sin, asin, cos, radians, sqrt
- 
-EARTH_RADIUS=6371           # radius of the earth，6371km
- 
+
+def load_nyc_sharing_bike_data(directory="data/NYC-Sharing-Bike"):
+    if (not os.path.isfile(directory + "/adj_mat.npy")
+            or not os.path.isfile(directory + "/node_values.npy")):
+        if os.path.isfile(directory + "/NYC-Sharing-Bike.zip"):
+            with zipfile.ZipFile(directory + "/NYC-Sharing-Bike.zip", 'r') as zip_ref:
+                zip_ref.extractall(directory)
+        else:
+            parse_nyc_sharing_bike_data(directory, "/201307-201402-citibike-tripdata.zip")
+
+    A = np.load(directory + "/adj_mat.npy")
+    # X's shape is (num_nodes, num_features, num_sequence)
+    X = np.load(directory + "/node_values.npy")
+    X = X.astype(np.float32)
+    print('(num_nodes, num_features, num_time_steps) is ', X.shape)
+    
+    # Normalization using Z-score method
+    means = np.mean(X, axis=(0, 2))
+    X = X - means.reshape(1, -1, 1)
+    stds = np.std(X, axis=(0, 2))
+    X = X / stds.reshape(1, -1, 1)
+
+    return A, X, means, stds
+
+def parse_nyc_sharing_bike_data(directory, filename):
+    zip_path = directory + "/" + filename
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(directory)
+    
+    # zipfile example: 201307-201402-citibike-tripdata.zip
+    start_date = datetime.datetime.strptime(filename.split('-')[0], '%Y%m')
+    end_date = datetime.datetime.strptime(filename.split('-')[1], '%Y%m')
+    month_delta = relativedelta(end_date, start_date).months
+
+    max_timestep = (month_delta + 1) * 31 * 24
+    max_nodes = 1000
+    nodes_info = {}
+    # X's shape is (num_nodes, num_features, num_sequence)
+    X = np.zeros((max_nodes, 1, max_timestep))
+    
+    # read monthly data
+    timestep_base = 0
+    for delta in range(0, month_delta + 1):
+        cur_date = start_date + relativedelta(months = delta)
+        month_day = calendar.monthrange(cur_date.year, cur_date.month)[1]
+        # path example: 2013-08 - Citi Bike trip data.csv
+        monthly_data_path = directory + "/" + cur_date.strftime("%Y-%m") + " - Citi Bike trip data.csv"
+        
+        if os.path.exists(monthly_data_path):
+            read_monthly_tripdata(monthly_data_path, nodes_info, X, timestep_base)
+            timestep_base += 24 * month_day
+            print("Read %s data successfully." % cur_date.strftime("%Y-%m"))
+        else:
+            print("[ERROR]File %s not exists." % monthly_data_path)
+            return
+    
+    num_nodes = len(nodes_info)
+    print("nodes num is %d." % num_nodes)
+    X = X[:num_nodes][:][:timestep_base]
+    A = np.zeros((num_nodes, num_nodes))
+    
+    # calculate adj matrix
+    for (id_i, info_i) in  nodes_info.items():
+        for (id_j, info_j) in  nodes_info.items():
+            idx_i = info_i['index']
+            idx_j = info_j['index']
+            if idx_i != idx_j:
+                A[idx_i][idx_j] = 1 / calculate_distance(info_i['lon'], info_i['lat']
+                                                         , info_j['lon'], info_j['lat'])
+    # normalize adj matrix
+    A = (A.T / A.sum(axis=1)).T
+    
+    # save as .npy file
+    np.save(directory + "/nodes_info.npy", nodes_info)
+    np.save(directory + "/adj_mat.npy", A)
+    np.save(directory + "/node_values.npy", X)
+    return
+
+def read_monthly_tripdata(path, nodes_info, X, timestep_base):
+    data = pd.read_csv(path)
+    for _, row in data.iterrows():
+        # origin data
+        stoptime = datetime.datetime.strptime(row['stoptime'], '%Y-%m-%d %H:%M:%S')
+        start_station_id = row['start station id']
+        end_station_id = row['end station id']
+        
+        if not nodes_info.get(start_station_id):
+            index = len(nodes_info)
+            nodes_info[start_station_id] = {}
+            nodes_info[start_station_id]['index'] = index
+            nodes_info[start_station_id]['lon'] = row['start station longitude']
+            nodes_info[start_station_id]['lat'] = row['start station latitude']
+        if not nodes_info.get(end_station_id):
+            index = len(nodes_info)
+            nodes_info[end_station_id] = {}
+            nodes_info[end_station_id]['index'] = index
+            nodes_info[end_station_id]['lon'] = row['end station longitude']
+            nodes_info[end_station_id]['lat'] = row['end station latitude']
+            
+        end_station_index = nodes_info[end_station_id]['index']
+        timestep = timestep_base + (stoptime.day - 1) * 24 + stoptime.hour
+        X[end_station_index][0][timestep] += 1
+    return
+
 def hav(theta):
     s = sin(theta / 2)
     return s * s
  
-def calculate_distance_by_haversine(lon1, lat1, lon2, lat2):
+def calculate_distance(lon1, lat1, lon2, lat2):
     '''
     Use haversine formula to calculate distance between two points by longtude and latitude.
     The output is in kilometers
     '''
+    EARTH_RADIUS=6371           # 地球平均半径，6371km
     lat1 = radians(lat1)
     lat2 = radians(lat2)
     lon1 = radians(lon1)
@@ -27,15 +133,17 @@ def calculate_distance_by_haversine(lon1, lat1, lon2, lat2):
  
     return distance
 
-def load_metr_la_data():
-    if (not os.path.isfile("data/adj_mat.npy")
-            or not os.path.isfile("data/node_values.npy")):
-        with zipfile.ZipFile("data/METR-LA.zip", 'r') as zip_ref:
-            zip_ref.extractall("data/")
+def load_metr_la_data(directory="data/METR-LA"):
+    if (not os.path.isfile(directory + "/adj_mat.npy")
+            or not os.path.isfile(directory + "/node_values.npy")):
+        with zipfile.ZipFile(directory + "/METR-LA.zip", 'r') as zip_ref:
+            zip_ref.extractall(directory)
 
-    A = np.load("data/adj_mat.npy")
-    X = np.load("data/node_values.npy").transpose((1, 2, 0))
+    A = np.load(directory + "/adj_mat.npy")
+    # X's shape is (num_nodes, num_features, num_sequence)
+    X = np.load(directory + "/node_values.npy").transpose((1, 2, 0))
     X = X.astype(np.float32)
+    print('(num_nodes, num_features, num_time_steps) is ', X.shape)
 
     # Normalization using Z-score method
     means = np.mean(X, axis=(0, 2))

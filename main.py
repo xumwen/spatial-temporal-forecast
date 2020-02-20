@@ -10,7 +10,7 @@ from torch.nn.parallel.data_parallel import data_parallel
 
 from stgcn import STGCN
 from tgcn import TGCN
-from preprocess import generate_dataset, load_metr_la_data, get_normalized_adj
+from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
@@ -18,6 +18,8 @@ parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
 		    help='Choice Spatial-Temporal model', default='tgcn')
+parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
+            help='Choice dataset', default='metr')
 parser.add_argument('-batch_size', type=int, default=64,
 		    help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
@@ -90,9 +92,13 @@ if __name__ == '__main__':
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
     print("model:", args.model)
+    print("dataset:", args.dataset)
     torch.manual_seed(7)
 
-    A, X, means, stds = load_metr_la_data()
+    if args.dataset == "metr":
+        A, X, means, stds = load_metr_la_data()
+    else:
+        A, X, means, stds = load_nyc_sharing_bike_data()
 
     split_line1 = int(X.shape[2] * 0.6)
     split_line2 = int(X.shape[2] * 0.8)

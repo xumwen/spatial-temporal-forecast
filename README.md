@@ -20,4 +20,12 @@ This version was implemented by [https://github.com/FelixOpolka/STGCN-PyTorch](h
   
  ## Example Dataset
   
-The repository provides a usage example on the METR-LA dataset (original version to be found [here](https://github.com/liyaguang/DCRNN)). Another dataset PeMS is not available now.
+  * METR-LA
+
+The repository provides a usage example on the METR-LA dataset (original version to be found [here](https://github.com/liyaguang/DCRNN)).
+
+  * NYC Sharing Bike
+
+Origin source is [citibikenyc](https://www.citibikenyc.com/system-data).
+Example data is [201307-201402-citibike-tripdata.zip](https://s3.amazonaws.com/tripdata/index.html)
+

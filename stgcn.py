@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from gcn import GCNConv
 
 
 class TimeBlock(nn.Module):
@@ -60,32 +61,29 @@ class STGCNBlock(nn.Module):
         super(STGCNBlock, self).__init__()
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
-        self.Theta1 = nn.Parameter(torch.FloatTensor(out_channels,
-                                                     spatial_channels))
+        self.gcn = GCNConv(in_channels=out_channels,
+                           out_channels=spatial_channels)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        stdv = 1. / math.sqrt(self.Theta1.shape[1])
-        self.Theta1.data.uniform_(-stdv, stdv)
 
     def forward(self, X, A_hat):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
         :param A_hat: Normalized adjacency matrix.
-        :return: Output data of shape (batch_size, num_nodes,
-        num_timesteps_out, num_features=out_channels).
+        :return: Output data of shape (batch_size, num_nodes, num_timesteps_out,
+        num_features=out_channels).
         """
-        t = self.temporal1(X)
-        lfs = torch.einsum("ij,jklm->kilm", [A_hat, t.permute(1, 0, 2, 3)])
-        # t2 = F.relu(torch.einsum("ijkl,lp->ijkp", [lfs, self.Theta1]))
-        t2 = F.relu(torch.matmul(lfs, self.Theta1))
-        t3 = self.temporal2(t2)
+        t1 = self.temporal1(X)
+        # batch_size * timesteps -> batch_size
+        t21 = t1.permute(0, 2, 1, 3).contiguous().view(-1, t1.shape[1], t1.shape[3])
+        t22 = F.relu(self.gcn(t21, A_hat))
+        # batch_size -> (batch_size, timesteps)
+        t23 = t22.view(t1.shape[0], t1.shape[2], t22.shape[1], t22.shape[2]).permute(0, 2, 1, 3)
+        t3 = self.temporal2(t23)
+        
         return self.batch_norm(t3)
-        # return t3
 
 
 class STGCN(nn.Module):
@@ -126,5 +124,3 @@ class STGCN(nn.Module):
         out3 = self.last_temporal(out2)
         out4 = self.fully(out3.reshape((out3.shape[0], out3.shape[1], -1)))
         return out4
-
-

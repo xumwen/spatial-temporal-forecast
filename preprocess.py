@@ -15,7 +15,7 @@ def load_nyc_sharing_bike_data(directory="data/NYC-Sharing-Bike"):
             with zipfile.ZipFile(directory + "/NYC-Sharing-Bike.zip", 'r') as zip_ref:
                 zip_ref.extractall(directory)
         else:
-            parse_nyc_sharing_bike_data(directory, "/201307-201402-citibike-tripdata.zip")
+            parse_nyc_sharing_bike_data(directory, "201307-201612-citibike-tripdata.zip")
 
     A = np.load(directory + "/adj_mat.npy")
     A = A.astype(np.float32)
@@ -34,13 +34,14 @@ def load_nyc_sharing_bike_data(directory="data/NYC-Sharing-Bike"):
 
 def parse_nyc_sharing_bike_data(directory, filename):
     zip_path = directory + "/" + filename
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(directory)
+    if os.path.exists(zip_path):
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(directory)
     
     # zipfile example: 201307-201402-citibike-tripdata.zip
     start_date = datetime.datetime.strptime(filename.split('-')[0], '%Y%m')
     end_date = datetime.datetime.strptime(filename.split('-')[1], '%Y%m')
-    month_delta = relativedelta(end_date, start_date).months
+    month_delta = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month
 
     max_timestep = (month_delta + 1) * 31 * 24
     max_nodes = 1000
@@ -52,17 +53,9 @@ def parse_nyc_sharing_bike_data(directory, filename):
     timestep_base = 0
     for delta in range(0, month_delta + 1):
         cur_date = start_date + relativedelta(months = delta)
+        read_monthly_tripdata(cur_date, nodes_info, X, timestep_base)
         month_day = calendar.monthrange(cur_date.year, cur_date.month)[1]
-        # path example: 2013-08 - Citi Bike trip data.csv
-        monthly_data_path = directory + "/" + cur_date.strftime("%Y-%m") + " - Citi Bike trip data.csv"
-        
-        if os.path.exists(monthly_data_path):
-            read_monthly_tripdata(monthly_data_path, nodes_info, X, timestep_base)
-            timestep_base += 24 * month_day
-            print("Read %s data successfully." % cur_date.strftime("%Y-%m"))
-        else:
-            print("[ERROR]File %s not exists." % monthly_data_path)
-            return
+        timestep_base += 24 * month_day
     
     num_nodes = len(nodes_info)
     print("nodes num is %d." % num_nodes)
@@ -77,6 +70,7 @@ def parse_nyc_sharing_bike_data(directory, filename):
             if idx_i != idx_j:
                 A[idx_i][idx_j] = 1 / calculate_distance(info_i['lon'], info_i['lat']
                                                          , info_j['lon'], info_j['lat'])
+
     # normalize adj matrix
     A = (A.T / A.sum(axis=1)).T
     
@@ -86,14 +80,29 @@ def parse_nyc_sharing_bike_data(directory, filename):
     np.save(directory + "/node_values.npy", X)
     return
 
-def read_monthly_tripdata(path, nodes_info, X, timestep_base):
+def read_monthly_tripdata(date, nodes_info, X, timestep_base):
+    # path example: 2013-08 - Citi Bike trip data.csv or 201409-citibike-tripdata.csv
+    path = directory + "/" + date.strftime("%Y-%m") + " - Citi Bike trip data.csv"
+    mod = 1
+    if not os.path.exists(path):
+        path = directory + "/" + date.strftime("%Y%m") + "-citibike-tripdata.csv"
+        mod = 2
+    if not os.path.exists(path):
+        print("[ERROR]File %s not exists." % path)
+        return
+    
     data = pd.read_csv(path)
     for _, row in data.iterrows():
         # origin data
-        stoptime = datetime.datetime.strptime(row['stoptime'], '%Y-%m-%d %H:%M:%S')
         start_station_id = row['start station id']
         end_station_id = row['end station id']
+        hour_index = row['stoptime'].find(":")
+        if mod == 1:
+            stoptime = datetime.datetime.strptime(row['stoptime'][:hour_index], '%Y-%m-%d %H')
+        elif mod == 2:
+            stoptime = datetime.datetime.strptime(row['stoptime'][:hour_index], '%m/%d/%Y %H')
         
+        # add station info
         if not nodes_info.get(start_station_id):
             index = len(nodes_info)
             nodes_info[start_station_id] = {}
@@ -106,10 +115,12 @@ def read_monthly_tripdata(path, nodes_info, X, timestep_base):
             nodes_info[end_station_id]['index'] = index
             nodes_info[end_station_id]['lon'] = row['end station longitude']
             nodes_info[end_station_id]['lat'] = row['end station latitude']
-            
+        
         end_station_index = nodes_info[end_station_id]['index']
         timestep = timestep_base + (stoptime.day - 1) * 24 + stoptime.hour
         X[end_station_index][0][timestep] += 1
+        
+    print("Read %s data successfully." % date.strftime("%Y-%m"))
     return
 
 def hav(theta):
@@ -132,7 +143,7 @@ def calculate_distance(lon1, lat1, lon2, lat2):
     h = hav(dlat) + cos(lat1) * cos(lat2) * hav(dlon)
     distance = 2 * EARTH_RADIUS * asin(sqrt(h))
  
-    return distance
+    return max(distance, 0.1)
 
 def load_metr_la_data(directory="data/METR-LA"):
     if (not os.path.isfile(directory + "/adj_mat.npy")

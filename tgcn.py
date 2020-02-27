@@ -25,13 +25,14 @@ class GCNBlock(nn.Module):
         :return: Output data of shape (batch_size, num_nodes,
         num_timesteps_out, num_features=out_channels).
         """
-        t1 = X.permute(0, 2, 1, 3).contiguous().view(-1, X.shape[1], X.shape[3])
-        t2 = self.gcn(t1, A)
+        bn = self.batch_norm(X)
+        t1 = bn.permute(0, 2, 1, 3).contiguous().view(-1, bn.shape[1], bn.shape[3])
+        t2 = self.gcn1(t1, A)
         gcn1 = t2.view(X.shape[0], X.shape[2], t2.shape[1], t2.shape[2]).permute(0, 2, 1, 3)
         relu1 = F.relu(gcn1)
         
         t3 = relu1.permute(0, 2, 1, 3).contiguous().view(-1, relu1.shape[1], relu1.shape[3])
-        t4 = self.gcn(t3, A)
+        t4 = self.gcn2(t3, A)
         gcn2 = t4.view(X.shape[0], X.shape[2], t4.shape[1], t4.shape[2]).permute(0, 2, 1, 3)
  
         output = torch.sigmoid(gcn2)
@@ -65,7 +66,7 @@ class GRUBlock(nn.Module):
 
 class TGCN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, hidden_size=64, gcn_type):
+                 num_timesteps_output, gcn_type='normal', hidden_size=64):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.

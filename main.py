@@ -20,8 +20,8 @@ parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
 		    help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
             help='Choose dataset', default='nyc-bike')
-parser.add_argument('-t', "--gcn_type", choices=['norm', 'cheb'],
-            help='Choose GCN Conv Type', default='norm')
+parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
+            help='Choose GCN Conv Type', default='normal')
 parser.add_argument('-batch_size', type=int, default=64,
 		    help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
@@ -152,9 +152,6 @@ if __name__ == '__main__':
                                    batch_size=batch_size,
                                    mod='eval')
             validation_losses.append(val_loss)
-            
-            val_input = val_input.to(device="cpu")
-            val_target = val_target.to(device="cpu")
 
         print("Training loss: {:.4f}".format(training_losses[-1]))
         print("Validation loss: {:.4f}".format(validation_losses[-1]))

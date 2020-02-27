@@ -82,7 +82,7 @@ class ChebConv(nn.Module):
         diag = torch.reciprocal(torch.sqrt(D))
         A_wave = diag.view((-1, 1)) * A * diag.view((1, -1))
         L = I - A_wave
-        L_hat = (2.0 * L) / lambda_max
+        L_hat = (2.0 * L) / lambda_max - I
         return L_hat
 
     def forward(self, X, A, lambda_max=None):

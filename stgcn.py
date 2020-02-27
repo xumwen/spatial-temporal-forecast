@@ -71,7 +71,7 @@ class STGCNBlock(nn.Module):
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
 
-    def forward(self, X, A_hat):
+    def forward(self, X, A):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
@@ -82,7 +82,7 @@ class STGCNBlock(nn.Module):
         t1 = self.temporal1(X)
         # batch_size * timesteps -> batch_size
         t21 = t1.permute(0, 2, 1, 3).contiguous().view(-1, t1.shape[1], t1.shape[3])
-        t22 = F.relu(self.gcn(t21, A_hat))
+        t22 = F.relu(self.gcn(t21, A))
         # batch_size -> (batch_size, timesteps)
         t23 = t22.view(t1.shape[0], t1.shape[2], t22.shape[1], t22.shape[2]).permute(0, 2, 1, 3)
         t3 = self.temporal2(t23)
@@ -119,14 +119,14 @@ class STGCN(nn.Module):
         self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
                                num_timesteps_output)
 
-    def forward(self, A_hat, X):
+    def forward(self, A, X):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
-        :param A_hat: Normalized adjacency matrix.
+        :param A: Normalized adjacency matrix.
         """
-        out1 = self.block1(X, A_hat)
-        out2 = self.block2(out1, A_hat)
+        out1 = self.block1(X, A)
+        out2 = self.block2(out1, A)
         out3 = self.last_temporal(out2)
         out4 = self.fully(out3.reshape((out3.shape[0], out3.shape[1], -1)))
         return out4

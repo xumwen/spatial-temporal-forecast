@@ -15,7 +15,7 @@ class GCNBlock(nn.Module):
                             out_channels=spatial_channels)
         self.gcn2 = GCNCell(in_channels=spatial_channels,
                             out_channels=spatial_channels)
-        self.batch_norm = nn.BatchNorm2d(num_nodes)
+        # self.batch_norm = nn.BatchNorm2d(num_nodes)
         
     def forward(self, X, A):
         """
@@ -25,18 +25,12 @@ class GCNBlock(nn.Module):
         :return: Output data of shape (batch_size, num_nodes,
         num_timesteps_out, num_features=out_channels).
         """
-        bn = self.batch_norm(X)
-        t1 = bn.permute(0, 2, 1, 3).contiguous().view(-1, bn.shape[1], bn.shape[3])
-        t2 = self.gcn1(t1, A)
-        gcn1 = t2.view(X.shape[0], X.shape[2], t2.shape[1], t2.shape[2]).permute(0, 2, 1, 3)
-        relu1 = F.relu(gcn1)
-        
-        t3 = relu1.permute(0, 2, 1, 3).contiguous().view(-1, relu1.shape[1], relu1.shape[3])
-        t4 = self.gcn2(t3, A)
-        gcn2 = t4.view(X.shape[0], X.shape[2], t4.shape[1], t4.shape[2]).permute(0, 2, 1, 3)
- 
-        output = torch.sigmoid(gcn2)
-        return output
+        t1 = X.permute(0, 2, 1, 3).contiguous().view(-1, X.shape[1], X.shape[3])
+        t2 = F.relu(self.gcn1(t1, A))
+        t3 = torch.sigmoid(self.gcn2(t2, A))
+        out = t3.view(X.shape[0], X.shape[2], t3.shape[1], t3.shape[2]).permute(0, 2, 1, 3)
+
+        return out
 
 class GRUBlock(nn.Module):
     def __init__(self, input_size, hidden_size, output_seq_len):
@@ -53,7 +47,7 @@ class GRUBlock(nn.Module):
         num_timesteps_out, num_features=out_channels).
         """
         # batch_size * num_nodes -> batch
-        gru_input = X.view(-1, X.shape[2], X.shape[3]).permute(1, 0, 2)
+        gru_input = X.contiguous().view(-1, X.shape[2], X.shape[3]).permute(1, 0, 2)
         hidden = torch.zeros(1, X.shape[0] * X.shape[1], self.hidden_size, device=X.device)
         t, hidden = self.gru(gru_input, hidden)
         output = torch.zeros(self.output_seq_len, gru_input.shape[1], self.hidden_size, device=X.device)

@@ -27,7 +27,7 @@ class GCNConv(nn.Module):
         Returns the degree normalized adjacency matrix.
         Formula: A_wave = D_hat^(-1/2) * A_hat * D_hat^(-1/2), and A_hat = A + I
         """
-        A_hat = A + torch.diag(torch.ones(A.shape[0]))
+        A_hat = A + torch.diag(torch.ones(A.shape[0])).to(A.device)
         D = A_hat.sum(1).view((-1,))
         D[D <= 10e-5] = 10e-5
         diag = torch.reciprocal(torch.sqrt(D))
@@ -73,7 +73,7 @@ class ChebConv(nn.Module):
         Returns the normalized and scaled adjacency matrix.
         Formula: L = I - D^(-1/2) * A * D^(-1/2), L_hat = (2L / lambda_max) - I
         """
-        I = torch.ones(A.shape[0])
+        I = torch.ones(A.shape[0]).to(A.device)
         # Remove self-loops
         if A[0][0] != 0:
             A = A - torch.diag(A[0][0] * I)

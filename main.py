@@ -17,9 +17,9 @@ parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
-		    help='Choose Spatial-Temporal model', default='tgcn')
+		    help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-            help='Choose dataset', default='metr')
+            help='Choose dataset', default='nyc-bike')
 parser.add_argument('-t', "--gcn_type", choices=['norm', 'cheb'],
             help='Choose GCN Conv Type', default='norm')
 parser.add_argument('-batch_size', type=int, default=64,

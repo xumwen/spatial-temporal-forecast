@@ -5,16 +5,19 @@ import torch.nn.functional as F
 from gcn import GCNConv, ChebConv
 
 class GCNBlock(nn.Module):
-    def __init__(self, in_channels, spatial_channels, num_nodes):
+    def __init__(self, in_channels, spatial_channels, num_nodes, gcn_type):
         super(GCNBlock, self).__init__()
-        self.Theta1 = nn.Parameter(torch.FloatTensor(in_channels,
-                                                     spatial_channels))
-        self.Theta2 = nn.Parameter(torch.FloatTensor(spatial_channels,
-                                                     spatial_channels))
+        if gcn_type == 'cheb':
+            GCNCell = ChebConv
+        else:
+            GCNCell = GCNConv
+        self.gcn1 = GCNCell(in_channels=in_channels,
+                            out_channels=spatial_channels)
+        self.gcn2 = GCNCell(in_channels=spatial_channels,
+                            out_channels=spatial_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
-        self.reset_parameters()
         
-    def forward(self, X, A_hat):
+    def forward(self, X, A):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
@@ -22,19 +25,17 @@ class GCNBlock(nn.Module):
         :return: Output data of shape (batch_size, num_nodes,
         num_timesteps_out, num_features=out_channels).
         """
-        bn = self.batch_norm(X)
-        gcn1 = torch.einsum("ij,jklm->kilm", [A_hat, bn.permute(1, 0, 2, 3)])
-        relu1 = F.relu(torch.matmul(gcn1, self.Theta1))
-        gcn2 = torch.einsum("ij,jklm->kilm", [A_hat, relu1.permute(1, 0, 2, 3)])
-        output = torch.sigmoid(torch.matmul(gcn2, self.Theta2))
+        t1 = X.permute(0, 2, 1, 3).contiguous().view(-1, X.shape[1], X.shape[3])
+        t2 = self.gcn(t1, A)
+        gcn1 = t2.view(X.shape[0], X.shape[2], t2.shape[1], t2.shape[2]).permute(0, 2, 1, 3)
+        relu1 = F.relu(gcn1)
         
+        t3 = relu1.permute(0, 2, 1, 3).contiguous().view(-1, relu1.shape[1], relu1.shape[3])
+        t4 = self.gcn(t3, A)
+        gcn2 = t4.view(X.shape[0], X.shape[2], t4.shape[1], t4.shape[2]).permute(0, 2, 1, 3)
+ 
+        output = torch.sigmoid(gcn2)
         return output
-
-    def reset_parameters(self):
-        stdv1 = 1. / math.sqrt(self.Theta1.shape[1])
-        self.Theta1.data.uniform_(-stdv1, stdv1)
-        stdv2 = 1. / math.sqrt(self.Theta2.shape[1])
-        self.Theta2.data.uniform_(-stdv2, stdv2)
 
 class GRUBlock(nn.Module):
     def __init__(self, input_size, hidden_size, output_seq_len):
@@ -64,7 +65,7 @@ class GRUBlock(nn.Module):
 
 class TGCN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, hidden_size = 64):
+                 num_timesteps_output, hidden_size=64, gcn_type):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -75,19 +76,19 @@ class TGCN(nn.Module):
         """
         super(TGCN, self).__init__()
         # self.input_linear = nn.Linear(num_features, hidden_size)
-        self.gcn = GCNBlock(in_channels = num_features, spatial_channels = hidden_size,
-                                num_nodes = num_nodes)
-        self.gru = GRUBlock(input_size = hidden_size, hidden_size = hidden_size,
-                                output_seq_len = num_timesteps_output)
+        self.gcn = GCNBlock(in_channels=num_features, spatial_channels=hidden_size,
+                                num_nodes=num_nodes, gcn_type=gcn_type)
+        self.gru = GRUBlock(input_size=hidden_size, hidden_size=hidden_size,
+                                output_seq_len=num_timesteps_output)
         self.linear = nn.Linear(hidden_size, 1)
 
-    def forward(self, A_hat, X):
+    def forward(self, A, X):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
         :param A_hat: Normalized adjacency matrix.
         """
-        out1 = self.gcn(X, A_hat)
+        out1 = self.gcn(X, A)
         # out1 = self.input_linear(X)
         out2 = self.gru(out1)
         out3 = self.linear(out2).squeeze(dim = 3)

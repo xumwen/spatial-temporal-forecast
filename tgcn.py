@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from gcn import GCNConv, ChebConv
 
 class GCNBlock(nn.Module):
     def __init__(self, in_channels, spatial_channels, num_nodes):

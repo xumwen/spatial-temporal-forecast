@@ -17,9 +17,11 @@ parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
-		    help='Choice Spatial-Temporal model', default='tgcn')
+		    help='Choose Spatial-Temporal model', default='tgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-            help='Choice dataset', default='metr')
+            help='Choose dataset', default='metr')
+parser.add_argument('-t', "--gcn_type", choices=['norm', 'cheb'],
+            help='Choose GCN Conv Type', default='norm')
 parser.add_argument('-batch_size', type=int, default=64,
 		    help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
@@ -38,6 +40,7 @@ if args.model == 'tgcn':
     model = TGCN
 else:
     model = STGCN
+gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
@@ -68,7 +71,7 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
         X_batch = X_batch.to(device=args.device)
         y_batch = y_batch.to(device=args.device)
     
-        out = data_parallel(net,X_batch)
+        out = data_parallel(net, X_batch)
         loss = loss_criterion(out, y_batch)
         if mod == 'train':
             loss.backward()
@@ -83,16 +86,17 @@ class WarpperNet(nn.Module):
         super(WarpperNet, self).__init__()
         self.net = net
         # self.A = A
-        self.register_buffer("A_wave", A)
+        self.register_buffer("A", A)
 
     def forward(self, X):
-        return self.net(self.A_wave, X)
+        return self.net(self.A, X)
         
 if __name__ == '__main__':
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
     print("model:", args.model)
     print("dataset:", args.dataset)
+    print("gcn type:", args.gcn_type)
     torch.manual_seed(7)
 
     if args.dataset == "metr":
@@ -117,14 +121,15 @@ if __name__ == '__main__':
                                                num_timesteps_input=num_timesteps_input,
                                                num_timesteps_output=num_timesteps_output)
 
-    A_wave = torch.from_numpy(get_normalized_adj(A)).to(device=args.device)
+    A = torch.from_numpy(A).to(device=args.device)
 
-    basenet = model(A_wave.shape[0],
+    basenet = model(A.shape[0],
                 training_input.shape[3],
                 num_timesteps_input,
-                num_timesteps_output).to(device=args.device)
+                num_timesteps_output,
+                gcn_type).to(device=args.device)
     
-    net = WarpperNet(basenet, A_wave)
+    net = WarpperNet(basenet, A)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
     loss_criterion = nn.MSELoss()

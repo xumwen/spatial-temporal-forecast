@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gcn import GCNConv
+from gcn import GCNConv, ChebConv
 
 
 class TimeBlock(nn.Module):
@@ -48,7 +48,7 @@ class STGCNBlock(nn.Module):
     """
 
     def __init__(self, in_channels, spatial_channels, out_channels,
-                 num_nodes):
+                 num_nodes, gcn_type):
         """
         :param in_channels: Number of input features at each node in each time
         step.
@@ -61,7 +61,11 @@ class STGCNBlock(nn.Module):
         super(STGCNBlock, self).__init__()
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
-        self.gcn = GCNConv(in_channels=out_channels,
+        if gcn_type == 'cheb':
+            GCNCell = ChebConv
+        else:
+            GCNCell = GCNConv
+        self.gcn = GCNCell(in_channels=out_channels,
                            out_channels=spatial_channels)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
@@ -95,7 +99,7 @@ class STGCN(nn.Module):
     """
 
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output):
+                 num_timesteps_output, gcn_type='normal'):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -106,9 +110,11 @@ class STGCN(nn.Module):
         """
         super(STGCN, self).__init__()
         self.block1 = STGCNBlock(in_channels=num_features, out_channels=64,
-                                 spatial_channels=16, num_nodes=num_nodes)
+                                 spatial_channels=16, num_nodes=num_nodes,
+                                 gcn_type=gcn_type)
         self.block2 = STGCNBlock(in_channels=64, out_channels=64,
-                                 spatial_channels=16, num_nodes=num_nodes)
+                                 spatial_channels=16, num_nodes=num_nodes,
+                                 gcn_type=gcn_type)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
         self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
                                num_timesteps_output)

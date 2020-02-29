@@ -81,9 +81,9 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
         epoch_training_losses.append(loss.detach().cpu().numpy())
     return sum(epoch_training_losses)/len(epoch_training_losses)
 
-class WarpperNet(nn.Module):
+class WrapperNet(nn.Module):
     def __init__(self, net, A):
-        super(WarpperNet, self).__init__()
+        super(WrapperNet, self).__init__()
         self.net = net
         # self.A = A
         self.register_buffer("A", A)
@@ -129,7 +129,7 @@ if __name__ == '__main__':
                 num_timesteps_output,
                 gcn_type).to(device=args.device)
     
-    net = WarpperNet(basenet, A)
+    net = WrapperNet(basenet, A)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
     loss_criterion = nn.MSELoss()

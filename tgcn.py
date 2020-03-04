@@ -53,7 +53,7 @@ class EncoderMultiGRU(nn.Module):
         super(EncoderMultiGRU, self).__init__()
         self.hidden_size = hidden_size
         self.num_rnns = num_rnns
-        self.grus = [torch.nn.GRU(input_size, hidden_size)] * num_rnns
+        self.grus = [torch.nn.GRU(input_size, hidden_size) for i in range(num_rnns)]
         self.embed = nn.Parameter(torch.FloatTensor(num_nodes,num_rnns))
         self.reset_parameters()
 

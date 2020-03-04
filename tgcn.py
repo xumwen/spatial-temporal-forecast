@@ -74,6 +74,10 @@ class EncoderMultiGRU(nn.Module):
         output = output.contiguous().view(X.shape[0],X.shape[1],self.hidden_size)
         return output, output[-1,:,:]
 
+    def reset_parameters(self):
+        stdv1 = 1. / math.sqrt(self.embed.shape[1])
+        self.embed.data.uniform_(-stdv1, stdv1)
+
 class DecoderGRU(nn.Module):
     def __init__(self, input_size, hidden_size, output_seq_len):
         super(DecoderGRU, self).__init__()

@@ -48,9 +48,9 @@ class EncoderGRU(nn.Module):
         output, hidden = self.gru(X, hidden)
         return output, hidden
 
-class MultiGRUBlock(nn.Module):
+class EncoderMultiGRU(nn.Module):
     def __init__(self, input_size, hidden_size, num_nodes, num_rnns=6):
-        super(MultiGRUBlock, self).__init__()
+        super(EncoderMultiGRU, self).__init__()
         self.hidden_size = hidden_size
         self.num_rnns = num_rnns
         self.grus = [torch.nn.GRU(input_size, hidden_size)] * num_rnns
@@ -72,7 +72,7 @@ class MultiGRUBlock(nn.Module):
         gru_output = gru_output.contiguous().view(X.shape[0],-1,self.num_nodes,self.hidden_size,self.num_rnns)
         output = torch.einsum("ijkmn,kn->ijkm",[gru_output, torch.softmax(self.embed, dim=-1)])
         output = output.contiguous().view(X.shape[0],X.shape[1],self.hidden_size)
-        return output
+        return output, output[-1,:,:]
 
 class DecoderGRU(nn.Module):
     def __init__(self, input_size, hidden_size, output_seq_len):

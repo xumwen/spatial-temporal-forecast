@@ -63,7 +63,7 @@ class EncoderMultiGRU(nn.Module):
         :return output: Output data of shape (input_seq_len, batch_size, hidden_size).
         :return hidden: Last hidden of shape (1, batch_size, hidden_size)
         """
-        gru_output = torch.zeros(,X.shape[0],X.shape[1],self.hidden_size,self.num_rnns,device=X.device)
+        gru_output = torch.zeros(X.shape[0],X.shape[1],self.hidden_size,self.num_rnns,device=X.device)
         for i in range(self.num_rnns):
             self.grus[i].to(device=X.device)
             t, h = self.grus[i].forward(X)

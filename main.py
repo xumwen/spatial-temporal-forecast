@@ -1,4 +1,5 @@
 import os
+import time
 import argparse
 import pickle as pk
 import numpy as np
@@ -6,7 +7,15 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 
-from torch.nn.parallel.data_parallel import data_parallel
+import pytorch_lightning as pl
+from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
+
+from pytorch_lightning.callbacks import EarlyStopping
+
+from argparse import Namespace
+
+from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
 
 from stgcn import STGCN
 from tgcn import TGCN
@@ -16,20 +25,26 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
-		    help='Choose Spatial-Temporal model', default='stgcn')
+parser.add_argument('--backend', choices=['dp', 'ddp'],
+                    help='Backend for data parallel', default='ddp')
+parser.add_argument('--log-name', type=str, default='default',
+                    help='Experiment name to log')
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
+                    help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-            help='Choose dataset', default='nyc-bike')
+                    help='Choose dataset', default='nyc-bike')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
-            help='Choose GCN Conv Type', default='normal')
+                    help='Choose GCN Conv Type', default='normal')
 parser.add_argument('-batch_size', type=int, default=64,
-		    help='Training batch size')
+                    help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
-		    help='Training epochs')
+                    help='Training epochs')
+parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae'],
+                    help='Choose loss criterion', default='mse')
 parser.add_argument('-num_timesteps_input', type=int, default=15,
-		    help='Num of input timesteps')
+                    help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
-		    help='Num of output timesteps for forecasting')
+                    help='Num of output timesteps for forecasting')
 
 args = parser.parse_args()
 if args.enable_cuda and torch.cuda.is_available():
@@ -40,58 +55,108 @@ if args.model == 'tgcn':
     model = TGCN
 else:
     model = STGCN
+
+backend = args.backend
+log_name = args.log_name
+
+loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
+    .get(args.loss_criterion)
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
 
-def train_epoch(training_input, training_target, batch_size, mod = 'train'):
-    """
-    Trains one epoch with the given data.
-    :param training_input: Training inputs of shape (num_samples, num_nodes,
-    num_timesteps_train, num_features).
-    :param training_target: Training targets of shape (num_samples, num_nodes,
-    num_timesteps_predict).
-    :param batch_size: Batch size to use during training.
-    :return: Average loss for this epoch.
-    """
-    permutation = torch.randperm(training_input.shape[0])
-        
-    epoch_training_losses = []
-    for i in range(0, training_input.shape[0], batch_size):
-        if mod == 'train':
-            net.train()
-        else:
-            net.eval()
-        optimizer.zero_grad()
 
-        indices = permutation[i:i + batch_size]
-        X_batch, y_batch = training_input[indices], training_target[indices]
-        X_batch = X_batch.to(device=args.device)
-        y_batch = y_batch.to(device=args.device)
-    
-        out = data_parallel(net, X_batch)
-        loss = loss_criterion(out, y_batch)
-        if mod == 'train':
-            loss.backward()
-            optimizer.step()
-            if i / batch_size % 10 == 0:
-                print('After training %d batches, loss = %lf' % (i / batch_size, loss.item()))
-        epoch_training_losses.append(loss.detach().cpu().numpy())
-    return sum(epoch_training_losses)/len(epoch_training_losses)
-
-class WrapperNet(nn.Module):
-    def __init__(self, net, A):
+class WrapperNet(pl.LightningModule):
+    # NOTE: pl module is supposed to only have ``hparams`` parameter
+    def __init__(self, hparams):
         super(WrapperNet, self).__init__()
-        self.net = net
-        # self.A = A
-        self.register_buffer("A", A)
+
+        self.hparams = hparams
+        self.net = model(
+            hparams.num_nodes,
+            hparams.num_features,
+            hparams.num_timesteps_input,
+            hparams.num_timesteps_output,
+            hparams.gcn_type
+        )
+
+        self.register_buffer('A', hparams.A)
+
+    def init_data(self, training_input, training_target, val_input, val_target, test_input, test_target):
+        print('preparing data...')
+        self.training_input = training_input
+        self.training_target = training_target
+        self.val_input = val_input
+        self.val_target = val_target
+        self.test_input = test_input
+        self.test_target = test_target
+
+    def make_dataloader(self, X, y, shuffle, backend=backend):
+        dataset = TensorDataset(X, y)
+
+        if backend == 'dp':
+            return DataLoader(dataset, batch_size=batch_size, num_workers=1, shuffle=shuffle, drop_last=True)
+        elif backend == 'ddp':
+            dist_sampler = DistributedSampler(dataset, shuffle=shuffle)
+            return DataLoader(dataset, batch_size=batch_size, num_workers=0, sampler=dist_sampler)
+
+    def train_dataloader(self):
+        return self.make_dataloader(self.training_input, self.training_target, shuffle=True)
+
+    def val_dataloader(self):
+        return [
+            self.make_dataloader(
+                self.val_input, self.val_target, shuffle=False),
+            self.make_dataloader(
+                self.test_input, self.test_target, shuffle=False),
+        ]
+
+    def test_dataloader(self):
+        return self.make_dataloader(self.test_input, self.test_target, shuffle=False, backend='dp')
 
     def forward(self, X):
         return self.net(self.A, X)
-        
+
+    def training_step(self, batch, batch_idx):
+        X, y = batch
+        y_hat = self(X)
+        assert(y.size() == y_hat.size())
+        loss = loss_criterion(y_hat, y)
+
+        return {'loss': loss, 'log': {'train_loss': loss}}
+
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        X, y = batch
+        y_hat = self(X)
+        return {'loss': loss_criterion(y_hat, y)}
+
+    def validation_end(self, outputs):
+        tqdm_dict = dict()
+        for idx, output in enumerate(outputs):
+            prefix = 'val' if idx == 0 else 'test'
+            loss_mean = torch.stack([x['loss'] for x in output]).mean()
+            tqdm_dict[prefix + '_loss'] = loss_mean
+        return {'progress_bar': tqdm_dict, 'log': tqdm_dict}
+
+    def test_step(self, batch, batch_idx):
+        X, y = batch
+        y_hat = self(X)
+        return {'loss': loss_criterion(y_hat, y)}
+
+    def test_end(self, outputs):
+        loss_mean = torch.stack([x['loss'] for x in outputs]).mean()
+        print('Mean test loss : {}'.format(loss_mean.item()))
+        tqdm_dict = {'test_loss': loss_mean}
+        return {'progress_bar': tqdm_dict, 'log': tqdm_dict}
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+
 if __name__ == '__main__':
+    start_time = time.time()
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
     print("model:", args.model)
@@ -121,48 +186,50 @@ if __name__ == '__main__':
                                                num_timesteps_input=num_timesteps_input,
                                                num_timesteps_output=num_timesteps_output)
 
-    A = torch.from_numpy(A).to(device=args.device)
+    A = torch.from_numpy(A)
 
-    basenet = model(A.shape[0],
-                training_input.shape[3],
-                num_timesteps_input,
-                num_timesteps_output,
-                gcn_type).to(device=args.device)
-    
-    net = WrapperNet(basenet, A)
+    hparams = Namespace(**{
+        'num_nodes': A.shape[0],
+        'num_features': training_input.shape[3],
+        'num_timesteps_input': num_timesteps_input,
+        'num_timesteps_output': num_timesteps_output,
+        'gcn_type': gcn_type,
+        'A': A
+    })
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
-    loss_criterion = nn.MSELoss()
+    net = WrapperNet(hparams)
 
-    training_losses = []
-    validation_losses = []
-    validation_maes = []
-    for epoch in range(epochs):
-        print('=' * 30, 'epoch %d'%(epoch+1), '=' * 30)
-        loss = train_epoch(training_input, 
-                           training_target,
-                           batch_size=batch_size,
-                           mod='train')
-        training_losses.append(loss)
+    net.init_data(
+        training_input, training_target,
+        val_input, val_target,
+        test_input, test_target
+    )
 
-        # Run validation
-        with torch.no_grad():  
-            val_loss = train_epoch(val_input,
-                                   val_target,
-                                   batch_size=batch_size,
-                                   mod='eval')
-            validation_losses.append(val_loss)
+    early_stop_callback = EarlyStopping(patience=5)
+    logger = TestTubeLogger(save_dir='./logs', name=log_name)
 
-        print("Training loss: {:.4f}".format(training_losses[-1]))
-        print("Validation loss: {:.4f}".format(validation_losses[-1]))
-        # print("Validation MAE: {}".format(validation_maes[-1]))
-        # plt.plot(training_losses, label="training loss")
-        # plt.plot(validation_losses, label="validation loss")
-        # plt.legend()
-        # plt.show()
+    trainer = pl.Trainer(
+        gpus=[1, 2],
+        max_epochs=epochs,
+        distributed_backend=backend,
+        early_stop_callback=early_stop_callback,
+        logger=logger
+    )
+    trainer.fit(net)
 
-        checkpoint_path = "checkpoints/"
-        if not os.path.exists(checkpoint_path):
-            os.makedirs(checkpoint_path)
-        with open("checkpoints/losses.pk", "wb") as fd:
-            pk.dump((training_losses, validation_losses), fd)
+    print('Training time {}'.format(time.time() - start_time))
+
+    # # Currently, there are some issues for testing under ddp setting, so switch it to dp setting
+    # # change the below line with your own checkpoint path
+    # net = WrapperNet.load_from_checkpoint('lightning_logs/version_0/checkpoints/_ckpt_epoch_4.ckpt')
+    # net.init_data(
+    #     training_input, training_target,
+    #     val_input, val_target,
+    #     test_input, test_target
+    # )
+    # tester = pl.Trainer(
+    #     gpus=4,
+    #     max_epochs=epochs,
+    #     distributed_backend='dp',
+    # )
+    # tester.test(net)

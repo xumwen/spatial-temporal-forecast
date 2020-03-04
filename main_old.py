@@ -7,7 +7,8 @@ import torch
 import torch.nn as nn
 
 from torch.nn.parallel.data_parallel import data_parallel
-
+from sklearn.metrics import mean_absolute_error as mae
+from sklearn.metrics import mean_squared_error as mse
 from stgcn import STGCN
 from tgcn import TGCN
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
@@ -17,19 +18,21 @@ parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
-		    help='Choose Spatial-Temporal model', default='stgcn')
+            help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
             help='Choose dataset', default='nyc-bike')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
             help='Choose GCN Conv Type', default='normal')
 parser.add_argument('-batch_size', type=int, default=64,
-		    help='Training batch size')
+            help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
-		    help='Training epochs')
+            help='Training epochs')
 parser.add_argument('-num_timesteps_input', type=int, default=15,
-		    help='Num of input timesteps')
+            help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
-		    help='Num of output timesteps for forecasting')
+            help='Num of output timesteps for forecasting')
+parser.add_argument('-log_path', default='results',
+            help='Path of training logs')
 
 args = parser.parse_args()
 if args.enable_cuda and torch.cuda.is_available():
@@ -43,10 +46,11 @@ else:
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs
+log_path = args.log_path
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
 
-def train_epoch(training_input, training_target, batch_size, mod = 'train'):
+def train_epoch(training_input, training_target, batch_size, mod = 'train', mean=0.0, std=1.0):
     """
     Trains one epoch with the given data.
     :param training_input: Training inputs of shape (num_samples, num_nodes,
@@ -57,8 +61,8 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
     :return: Average loss for this epoch.
     """
     permutation = torch.randperm(training_input.shape[0])
-        
-    epoch_training_losses = []
+
+    epoch_training_losses, preds, labels = [], [], []
     for i in range(0, training_input.shape[0], batch_size):
         if mod == 'train':
             net.train()
@@ -66,11 +70,15 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
             net.eval()
         optimizer.zero_grad()
 
-        indices = permutation[i:i + batch_size]
+        begin = i
+        end = min(begin + batch_size, training_input.shape[0]) 
+        indices = range(begin, end)
+        if mod == 'train':
+            indices = permutation[i:i + batch_size]
         X_batch, y_batch = training_input[indices], training_target[indices]
         X_batch = X_batch.to(device=args.device)
         y_batch = y_batch.to(device=args.device)
-    
+
         out = data_parallel(net, X_batch)
         loss = loss_criterion(out, y_batch)
         if mod == 'train':
@@ -79,18 +87,23 @@ def train_epoch(training_input, training_target, batch_size, mod = 'train'):
             if i / batch_size % 10 == 0:
                 print('After training %d batches, loss = %lf' % (i / batch_size, loss.item()))
         epoch_training_losses.append(loss.detach().cpu().numpy())
-    return sum(epoch_training_losses)/len(epoch_training_losses)
+        preds.append(out.detach().cpu().numpy())
+        labels.append(y_batch.detach().cpu().numpy())
 
-class WrapperNet(nn.Module):
+    preds = np.concatenate(preds, axis=0).flatten()*std + mean
+    labels = np.concatenate(labels, axis=0).flatten()*std + mean
+    metrics = [mae(labels, preds), mse(labels, preds)]
+    return sum(epoch_training_losses)/len(epoch_training_losses), metrics
+
+class WarpperNet(nn.Module):
     def __init__(self, net, A):
-        super(WrapperNet, self).__init__()
+        super(WarpperNet, self).__init__()
         self.net = net
-        # self.A = A
         self.register_buffer("A", A)
 
     def forward(self, X):
         return self.net(self.A, X)
-        
+
 if __name__ == '__main__':
     print('cuda available:', torch.cuda.is_available())
     print("device:", args.device)
@@ -128,8 +141,8 @@ if __name__ == '__main__':
                 num_timesteps_input,
                 num_timesteps_output,
                 gcn_type).to(device=args.device)
-    
-    net = WrapperNet(basenet, A)
+
+    net = WarpperNet(basenet, A)
 
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
     loss_criterion = nn.MSELoss()
@@ -139,30 +152,34 @@ if __name__ == '__main__':
     validation_maes = []
     for epoch in range(epochs):
         print('=' * 30, 'epoch %d'%(epoch+1), '=' * 30)
-        loss = train_epoch(training_input, 
+        loss, metrics = train_epoch(training_input, 
                            training_target,
                            batch_size=batch_size,
-                           mod='train')
+                           mod='train',
+                           mean = means[0],
+                           std = stds[0])
         training_losses.append(loss)
 
         # Run validation
         with torch.no_grad():  
-            val_loss = train_epoch(val_input,
+            val_loss, val_metrics = train_epoch(val_input,
                                    val_target,
                                    batch_size=batch_size,
-                                   mod='eval')
+                                   mod='eval',
+                                   mean = means[0],
+                                   std = stds[0])
             validation_losses.append(val_loss)
 
         print("Training loss: {:.4f}".format(training_losses[-1]))
         print("Validation loss: {:.4f}".format(validation_losses[-1]))
-        # print("Validation MAE: {}".format(validation_maes[-1]))
+        print("Validation MAE: {}, MSE: {}".format(val_metrics[0],val_metrics[1]))
         # plt.plot(training_losses, label="training loss")
         # plt.plot(validation_losses, label="validation loss")
         # plt.legend()
         # plt.show()
 
-        checkpoint_path = "checkpoints/"
+        checkpoint_path = "checkpoints/{}".format(log_path)
         if not os.path.exists(checkpoint_path):
             os.makedirs(checkpoint_path)
-        with open("checkpoints/losses.pk", "wb") as fd:
+        with open("{}/losses.pk".format(checkpoint_path), "wb") as fd:
             pk.dump((training_losses, validation_losses), fd)

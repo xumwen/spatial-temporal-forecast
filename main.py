@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
+from pytorch_lightning.loggers import TestTubeLogger
 
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -29,6 +29,10 @@ parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
                     help='Experiment name to log')
+parser.add_argument('--log-dir', type=str, default='./logs',
+                    help='Path to log dir')
+parser.add_argument('--gpus', type=int, default=1,
+                    help='Number of GPUs to use')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
@@ -45,6 +49,8 @@ parser.add_argument('-num_timesteps_input', type=int, default=15,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
+parser.add_argument('-early_stop_rounds', type=int, default=30,
+                    help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
 if args.enable_cuda and torch.cuda.is_available():
@@ -58,6 +64,8 @@ else:
 
 backend = args.backend
 log_name = args.log_name
+log_dir = args.log_dir
+gpus = args.gpus
 
 loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
     .get(args.loss_criterion)
@@ -66,6 +74,7 @@ batch_size = args.batch_size
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
+early_stop_rounds = args.early_stop_rounds
 
 
 class WrapperNet(pl.LightningModule):
@@ -82,7 +91,11 @@ class WrapperNet(pl.LightningModule):
             hparams.gcn_type
         )
 
-        self.register_buffer('A', hparams.A)
+        self.register_buffer('A', torch.Tensor(
+            hparams.num_nodes, hparams.num_nodes).float())
+
+    def init_graph(self, A):
+        self.A.copy_(A)
 
     def init_data(self, training_input, training_target, val_input, val_target, test_input, test_target):
         print('preparing data...')
@@ -138,6 +151,7 @@ class WrapperNet(pl.LightningModule):
             prefix = 'val' if idx == 0 else 'test'
             loss_mean = torch.stack([x['loss'] for x in output]).mean()
             tqdm_dict[prefix + '_loss'] = loss_mean
+        self.logger.experiment.flush()
         return {'progress_bar': tqdm_dict, 'log': tqdm_dict}
 
     def test_step(self, batch, batch_idx):
@@ -194,7 +208,6 @@ if __name__ == '__main__':
         'num_timesteps_input': num_timesteps_input,
         'num_timesteps_output': num_timesteps_output,
         'gcn_type': gcn_type,
-        'A': A
     })
 
     net = WrapperNet(hparams)
@@ -205,15 +218,18 @@ if __name__ == '__main__':
         test_input, test_target
     )
 
-    early_stop_callback = EarlyStopping(patience=5)
-    logger = TestTubeLogger(save_dir='./logs', name=log_name)
+    net.init_graph(A)
+
+    early_stop_callback = EarlyStopping(patience=early_stop_rounds)
+    logger = TestTubeLogger(save_dir=log_dir, name=log_name)
 
     trainer = pl.Trainer(
-        gpus=[1, 2],
+        gpus=gpus,
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,
-        logger=logger
+        logger=logger,
+        track_grad_norm=2
     )
     trainer.fit(net)
 
@@ -221,14 +237,14 @@ if __name__ == '__main__':
 
     # # Currently, there are some issues for testing under ddp setting, so switch it to dp setting
     # # change the below line with your own checkpoint path
-    # net = WrapperNet.load_from_checkpoint('lightning_logs/version_0/checkpoints/_ckpt_epoch_4.ckpt')
+    # net = WrapperNet.load_from_checkpoint('logs/ddp_exp/version_1/checkpoints/_ckpt_epoch_2.ckpt')
     # net.init_data(
     #     training_input, training_target,
     #     val_input, val_target,
     #     test_input, test_target
     # )
     # tester = pl.Trainer(
-    #     gpus=4,
+    #     gpus=gpus,
     #     max_epochs=epochs,
     #     distributed_backend='dp',
     # )

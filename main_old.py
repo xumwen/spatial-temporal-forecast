@@ -16,9 +16,7 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
-parser.add_argument('--enable-cuda', action='store_true',
-                    help='Enable CUDA')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gw'], 
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'], 
             help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
             help='Choose dataset', default='nyc-bike')
@@ -40,7 +38,7 @@ if args.enable_cuda and torch.cuda.is_available():
     args.device = torch.device('cuda')
 else:
     args.device = torch.device('cpu')
-model = {'tgcn':TGCN, 'stgcn':STGCN, 'gw':GWNET}\
+model = {'tgcn':TGCN, 'stgcn':STGCN, 'gwnet':GWNET}\
     .get(args.model)
 gcn_type = args.gcn_type
 batch_size = args.batch_size

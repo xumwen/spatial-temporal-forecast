@@ -156,7 +156,7 @@ class GWNET(nn.Module):
 
         # calculate the current adaptive adj matrix once per iteration
         # A = self.remove_self_loop(A)
-        A_list = [A, A.T]
+        A_list = [A, A.t()]
         if self.gcn_bool and self.addaptadj and self.num_adj != 0:
             adp = F.softmax(F.relu(torch.mm(self.nodevec1, self.nodevec2)), dim=1)
             A_list = A_list + [adp]

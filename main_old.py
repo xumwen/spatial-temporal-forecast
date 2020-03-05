@@ -19,9 +19,9 @@ parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'], 
             help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-            help='Choose dataset', default='nyc-bike')
+            help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
-            help='Choose GCN Conv Type', default='normal')
+            help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-batch_size', type=int, default=64,
             help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,

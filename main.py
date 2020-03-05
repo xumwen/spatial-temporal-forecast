@@ -212,7 +212,7 @@ if __name__ == '__main__':
     )
 
     early_stop_callback = EarlyStopping(patience=early_stop_rounds)
-    logger = TestTubeLogger(save_dir='./logs', name=log_name)
+    logger = TensorBoardLogger(save_dir='./logs', name=log_name)
 
     trainer = pl.Trainer(
         gpus=gpus,

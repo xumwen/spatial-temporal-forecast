@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
+from pytorch_lightning.loggers import TensorBoardLogger
 
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -148,6 +148,7 @@ class WrapperNet(pl.LightningModule):
             prefix = 'val' if idx == 0 else 'test'
             loss_mean = torch.stack([x['loss'] for x in output]).mean()
             tqdm_dict[prefix + '_loss'] = loss_mean
+        self.logger.experiment.flush()
         return {'progress_bar': tqdm_dict, 'log': tqdm_dict}
 
     def test_step(self, batch, batch_idx):

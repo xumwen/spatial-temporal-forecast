@@ -29,6 +29,8 @@ parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
                     help='Experiment name to log')
+parser.add_argument('--gpus', type=int, default=1,
+                    help='Number of GPUs to use')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
@@ -45,6 +47,8 @@ parser.add_argument('-num_timesteps_input', type=int, default=15,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
+parser.add_argument('-early_stop_rounds', type=int, default=30,
+                    help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
 if args.enable_cuda and torch.cuda.is_available():
@@ -58,6 +62,7 @@ else:
 
 backend = args.backend
 log_name = args.log_name
+gpus = args.gpus
 
 loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
     .get(args.loss_criterion)
@@ -66,6 +71,7 @@ batch_size = args.batch_size
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
+early_stop_rounds = args.early_stop_rounds
 
 
 class WrapperNet(pl.LightningModule):
@@ -205,11 +211,11 @@ if __name__ == '__main__':
         test_input, test_target
     )
 
-    early_stop_callback = EarlyStopping(patience=5)
+    early_stop_callback = EarlyStopping(patience=early_stop_rounds)
     logger = TestTubeLogger(save_dir='./logs', name=log_name)
 
     trainer = pl.Trainer(
-        gpus=[1, 2],
+        gpus=gpus,
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,

@@ -13,6 +13,7 @@ Pytorch version of stgcn proposed in [Spatio-Temporal Graph Convolutional Networ
 This version was implemented by [FelixOpolka](https://github.com/FelixOpolka/STGCN-PyTorch)
 
   * Graph Wavenet
+
 Pytorch version of graph wavenet proposed in [Graph WaveNet for Deep Spatial-Temporal Graph Modeling](https://arxiv.org/abs/1906.00121) by Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Chengqi Zhang.
 This version was implemented by [nnzhan](https://github.com/nnzhan/Graph-WaveNet).And there is a little refactoring on it. 
   

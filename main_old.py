@@ -11,13 +11,14 @@ from sklearn.metrics import mean_absolute_error as mae
 from sklearn.metrics import mean_squared_error as mse
 from stgcn import STGCN
 from tgcn import TGCN
+from gwnet import GWNET
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--enable-cuda', action='store_true',
                     help='Enable CUDA')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'], 
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gw'], 
             help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
             help='Choose dataset', default='nyc-bike')
@@ -27,7 +28,7 @@ parser.add_argument('-batch_size', type=int, default=64,
             help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
             help='Training epochs')
-parser.add_argument('-num_timesteps_input', type=int, default=15,
+parser.add_argument('-num_timesteps_input', type=int, default=12,
             help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
             help='Num of output timesteps for forecasting')
@@ -39,10 +40,8 @@ if args.enable_cuda and torch.cuda.is_available():
     args.device = torch.device('cuda')
 else:
     args.device = torch.device('cpu')
-if args.model == 'tgcn':
-    model = TGCN
-else:
-    model = STGCN
+model = {'tgcn':TGCN, 'stgcn':STGCN, 'gw':GWNET}\
+    .get(args.model)
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs

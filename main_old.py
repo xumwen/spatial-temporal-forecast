@@ -34,12 +34,8 @@ parser.add_argument('-log_path', default='results',
             help='Path of training logs')
 
 args = parser.parse_args()
-if args.enable_cuda and torch.cuda.is_available():
-    args.device = torch.device('cuda')
-else:
-    args.device = torch.device('cpu')
-model = {'tgcn':TGCN, 'stgcn':STGCN, 'gwnet':GWNET}\
-    .get(args.model)
+args.device = torch.device('cuda')
+model = {'tgcn':TGCN, 'stgcn':STGCN, 'gwnet':GWNET}.get(args.model)
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs

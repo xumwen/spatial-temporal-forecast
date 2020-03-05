@@ -8,7 +8,7 @@ Dataset
 
     Original data from https://s3.amazonaws.com/tripdata/index.html
 
-    Current data timestep is from 201307-201402.
+    Current data timestep is from 201307-201609.
 
     File NYC-Sharing-Bike.zip has been preprocessed.
 

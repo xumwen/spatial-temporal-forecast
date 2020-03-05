@@ -88,7 +88,11 @@ class WrapperNet(pl.LightningModule):
             hparams.gcn_type
         )
 
-        self.register_buffer('A', hparams.A)
+        self.register_buffer('A', torch.Tensor(
+            hparams.num_nodes, hparams.num_nodes).float())
+
+    def init_graph(self, A):
+        self.A.copy_(A)
 
     def init_data(self, training_input, training_target, val_input, val_target, test_input, test_target):
         print('preparing data...')
@@ -200,7 +204,6 @@ if __name__ == '__main__':
         'num_timesteps_input': num_timesteps_input,
         'num_timesteps_output': num_timesteps_output,
         'gcn_type': gcn_type,
-        'A': A
     })
 
     net = WrapperNet(hparams)
@@ -210,6 +213,8 @@ if __name__ == '__main__':
         val_input, val_target,
         test_input, test_target
     )
+
+    net.init_graph(A)
 
     early_stop_callback = EarlyStopping(patience=early_stop_rounds)
     logger = TensorBoardLogger(save_dir='./logs', name=log_name)
@@ -227,14 +232,14 @@ if __name__ == '__main__':
 
     # # Currently, there are some issues for testing under ddp setting, so switch it to dp setting
     # # change the below line with your own checkpoint path
-    # net = WrapperNet.load_from_checkpoint('lightning_logs/version_0/checkpoints/_ckpt_epoch_4.ckpt')
+    # net = WrapperNet.load_from_checkpoint('logs/ddp_exp/version_1/checkpoints/_ckpt_epoch_2.ckpt')
     # net.init_data(
     #     training_input, training_target,
     #     val_input, val_target,
     #     test_input, test_target
     # )
     # tester = pl.Trainer(
-    #     gpus=4,
+    #     gpus=gpus,
     #     max_epochs=epochs,
     #     distributed_backend='dp',
     # )

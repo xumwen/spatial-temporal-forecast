@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TestTubeLogger
 
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -29,6 +29,8 @@ parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
                     help='Experiment name to log')
+parser.add_argument('--log-dir', type=str, default='./logs',
+                    help='Path to log dir')
 parser.add_argument('--gpus', type=int, default=1,
                     help='Number of GPUs to use')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
@@ -62,6 +64,7 @@ else:
 
 backend = args.backend
 log_name = args.log_name
+log_dir = args.log_dir
 gpus = args.gpus
 
 loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
@@ -218,14 +221,15 @@ if __name__ == '__main__':
     net.init_graph(A)
 
     early_stop_callback = EarlyStopping(patience=early_stop_rounds)
-    logger = TensorBoardLogger(save_dir='./logs', name=log_name)
+    logger = TestTubeLogger(save_dir=log_dir, name=log_name)
 
     trainer = pl.Trainer(
         gpus=gpus,
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,
-        logger=logger
+        logger=logger,
+        track_grad_norm=2
     )
     trainer.fit(net)
 

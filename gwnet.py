@@ -132,11 +132,8 @@ class GWNET(nn.Module):
 
         self.receptive_field = receptive_field
 
-    def remove_self_loop(self, A):
-        I = torch.ones(A.shape[0])
-        if A[0][0] != 0:
-            A = A - torch.diag(A[0][0] * I)
-        return A
+    def norm(self, A):
+        return (A.t()/A.sum(1)).t()
 
     def forward(self, A, input):
         """
@@ -155,8 +152,7 @@ class GWNET(nn.Module):
         skip = 0
 
         # calculate the current adaptive adj matrix once per iteration
-        # A = self.remove_self_loop(A)
-        A_list = [A, A.t()]
+        A_list = [norm(A), norm(A.t())]
         if self.gcn_bool and self.addaptadj and self.num_adj != 0:
             adp = F.softmax(F.relu(torch.mm(self.nodevec1, self.nodevec2)), dim=1)
             A_list = A_list + [adp]

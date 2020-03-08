@@ -20,6 +20,7 @@ from torch.utils.data.distributed import DistributedSampler
 from stgcn import STGCN
 from tgcn import TGCN
 from localrnn import LocalRNN
+from globalrnn import GlobalRNN
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 
 
@@ -34,7 +35,7 @@ parser.add_argument('--log-dir', type=str, default='./logs',
                     help='Path to log dir')
 parser.add_argument('--gpus', type=int, default=1,
                     help='Number of GPUs to use')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'localrnn'],
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'localrnn', 'globalrnn'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
                     help='Choose dataset', default='nyc-bike')
@@ -59,7 +60,7 @@ if args.enable_cuda and torch.cuda.is_available():
 else:
     args.device = torch.device('cpu')
 
-model = {'tgcn': TGCN, 'stgcn': STGCN, 'localrnn': LocalRNN}.get(args.model)
+model = {'tgcn': TGCN, 'stgcn': STGCN, 'localrnn': LocalRNN, 'globalrnn': GlobalRNN}.get(args.model)
 
 backend = args.backend
 log_name = args.log_name

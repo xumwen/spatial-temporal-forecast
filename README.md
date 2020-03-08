@@ -10,7 +10,13 @@ PyTorch implementation of the spatio-temporal graph convolutional network propos
   * STGCN
 
 Pytorch version of stgcn proposed in [Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting](https://arxiv.org/abs/1709.04875) by Bing Yu, Haoteng Yin, Zhanxing Zhu.
-This version was implemented by [https://github.com/FelixOpolka/STGCN-PyTorch](https://github.com/FelixOpolka/STGCN-PyTorch)
+This version was implemented by [FelixOpolka](https://github.com/FelixOpolka/STGCN-PyTorch).
+
+  * Graph Wavenet
+
+Pytorch version of graph wavenet proposed in [Graph WaveNet for Deep Spatial-Temporal Graph Modeling](https://arxiv.org/abs/1906.00121) by Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Chengqi Zhang.
+This version was implemented by [nnzhan](https://github.com/nnzhan/Graph-WaveNet).
+And there is a little refactoring on it. 
   
  ## Requirements
   
@@ -28,4 +34,9 @@ The repository provides a usage example on the METR-LA dataset (original version
 
 Origin source is [citibikenyc](https://www.citibikenyc.com/system-data).
 Example data is [201307-201402-citibike-tripdata.zip](https://s3.amazonaws.com/tripdata/index.html)
+
+ ## Commands
+```
+python main.py -m gwnet -d metr
+```
 

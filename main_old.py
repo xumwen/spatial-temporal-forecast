@@ -16,14 +16,12 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
-parser.add_argument('--enable-cuda', action='store_true',
-                    help='Enable CUDA')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gw'], 
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'], 
             help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-            help='Choose dataset', default='nyc-bike')
+            help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
-            help='Choose GCN Conv Type', default='normal')
+            help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-batch_size', type=int, default=64,
             help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
@@ -36,12 +34,8 @@ parser.add_argument('-log_path', default='results',
             help='Path of training logs')
 
 args = parser.parse_args()
-if args.enable_cuda and torch.cuda.is_available():
-    args.device = torch.device('cuda')
-else:
-    args.device = torch.device('cpu')
-model = {'tgcn':TGCN, 'stgcn':STGCN, 'gw':GWNET}\
-    .get(args.model)
+args.device = torch.device('cuda')
+model = {'tgcn':TGCN, 'stgcn':STGCN, 'gwnet':GWNET}.get(args.model)
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs

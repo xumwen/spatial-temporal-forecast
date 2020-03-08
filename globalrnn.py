@@ -18,8 +18,12 @@ class GlobalRNN(nn.Module):
         """
         super(GlobalRNN, self).__init__()
         self.gru = nn.GRU(num_features, hidden_size)
-        self.linear = nn.Linear(hidden_size, num_timesteps_output)
+        self.linears = nn.ModuleList()
 
+        for n in range(num_nodes):
+            self.linears.append(
+                nn.Linear(hidden_size, num_timesteps_output)
+            )
 
     def forward(self, A, X):
         """
@@ -33,7 +37,11 @@ class GlobalRNN(nn.Module):
         hid = hid.mean(dim=0)
         hid = hid.view(sz[0], sz[1], -1)
 
-        out = self.linear(hid)
+        out = []
+        for n in range(hid.size(1)):
+            out.append(
+                self.linears[n](hid[:, n, :]).unsqueeze(dim=1)
+            )
+        out = torch.cat(out, dim=1)
 
         return out
-

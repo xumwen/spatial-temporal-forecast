@@ -40,11 +40,12 @@ def inferrence(prob, infer_type='mean'):
     if infer_type == 'mean':
         return mean
     elif infer_type == 'sample':
-        # sample for 1000 times
-        sample_sz = mean.size() + (1000, )
         normal = Normal(mean, std)
-        samples = normal.sample(sample_sz)
-        return torch.median(samples, dim=-1)
+        # sample for 1000 times
+        samples = normal.sample([1000])
+        samples = torch.median(samples, dim=0)[0]
+        print(samples.size())
+        return samples
 
 
 

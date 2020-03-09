@@ -37,6 +37,6 @@ Example data is [201307-201402-citibike-tripdata.zip](https://s3.amazonaws.com/t
 
  ## Commands
 ```
-python main.py -m gwnet -d metr
+python main_old.py -m gwnet -d metr
 ```
 

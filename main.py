@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 
+from utils import MLELoss, inferrence
+
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TestTubeLogger
 
@@ -46,8 +48,10 @@ parser.add_argument('-batch_size', type=int, default=64,
                     help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
                     help='Training epochs')
-parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae'],
+parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae', 'mle'],
                     help='Choose loss criterion', default='mse')
+parser.add_argument('--infer-type', choices=['mean', 'sample'],
+                    help='Choose inferrence method for sampling', default='mean')
 parser.add_argument('-num_timesteps_input', type=int, default=15,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
@@ -69,8 +73,11 @@ log_name = args.log_name
 log_dir = args.log_dir
 gpus = args.gpus
 
-loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
+train_loss = {'mse': nn.MSELoss(), 'mae': nn.L1Loss(), 'mle': MLELoss()}\
     .get(args.loss_criterion)
+# NOTE: fix mse as the evaluation loss
+eval_loss = nn.MSELoss()
+
 gcn_type = args.gcn_type
 batch_size = args.batch_size
 epochs = args.epochs
@@ -137,15 +144,16 @@ class WrapperNet(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         X, y = batch
         y_hat = self(X)
-        assert(y.size() == y_hat.size())
-        loss = loss_criterion(y_hat, y)
+        loss = train_loss(y_hat, y)
 
         return {'loss': loss, 'log': {'train_loss': loss}}
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
         X, y = batch
         y_hat = self(X)
-        return {'loss': loss_criterion(y_hat, y)}
+        if args.loss_criterion == 'mle':
+            y_hat = inferrence(y_hat, infer_type=args.infer_type)
+        return {'loss': eval_loss(y_hat, y)}
 
     def validation_end(self, outputs):
         tqdm_dict = dict()
@@ -159,7 +167,9 @@ class WrapperNet(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         X, y = batch
         y_hat = self(X)
-        return {'loss': loss_criterion(y_hat, y)}
+        if args.loss_criterion == 'mle':
+            y_hat = inferrence(y_hat, infer_type=args.infer_type)
+        return {'loss': eval_loss(y_hat, y)}
 
     def test_end(self, outputs):
         loss_mean = torch.stack([x['loss'] for x in outputs]).mean()

@@ -25,12 +25,11 @@ class KRNN(nn.Module):
                 nn.GRU(num_features, hidden_size)
             )
             self.linears.append(
-                nn.Linear(hidden_size, num_timesteps_output)
+                nn.Linear(hidden_size, num_timesteps_output * 2)
             )
 
         self.embed = nn.Parameter(torch.FloatTensor(num_nodes, num_comps))
         self.embed.data.normal_()
-
 
     def forward(self, A, X):
         """
@@ -51,7 +50,7 @@ class KRNN(nn.Module):
             out.append(
                 self.linears[i](hid).unsqueeze(dim=-1)
             )
-        
+
         out = torch.cat(out, dim=-1)
         weight = torch.softmax(self.embed, dim=-1)
 

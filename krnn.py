@@ -37,7 +37,6 @@ class KRNN(nn.Module):
         self.embed = nn.Parameter(torch.FloatTensor(num_nodes, num_comps))
         self.embed.data.normal_()
 
-
     def forward(self, A, X):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,

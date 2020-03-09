@@ -44,7 +44,6 @@ def inferrence(prob, infer_type='mean'):
         # sample for 1000 times
         samples = normal.sample([1000])
         samples = torch.median(samples, dim=0)[0]
-        print(samples.size())
         return samples
 
 

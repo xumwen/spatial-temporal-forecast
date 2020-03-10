@@ -62,7 +62,7 @@ class KRNN(nn.Module):
 
                 decoder_out.append(value)
 
-                last_value = value
+                last_value = value.detach()
 
             decoder_out = torch.cat(decoder_out, dim=-1).view(sz[0], sz[1], self.num_timesteps_output)
 

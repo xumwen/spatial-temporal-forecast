@@ -49,6 +49,8 @@ class Encoder(nn.Module):
 
         if self.use_pos_encode:
             encode_inputs = self.add_position_encode(inputs)
+        else:
+            encode_inputs = inputs
 
         inputs = inputs.permute(1, 0, 2)
         encode_inputs = encode_inputs.permute(1, 0, 2)
@@ -140,9 +142,13 @@ class Decoder(nn.Module):
             context = torch.einsum('ijk,ij->jk', encoder_out, attn_w)
 
             hidden = hidden + context
-            encode_last = torch.cat([last, pos_encode[:, step, :]], dim=-1)
 
-            hidden = self.rnn_cell(encode_last, hidden)
+            if self.use_pos_encode:
+                decode_last = torch.cat([last, pos_encode[:, step, :]], dim=-1)
+            else:
+                decode_last = last
+
+            hidden = self.rnn_cell(decode_last, hidden)
 
             out = self.linear(hidden)
             decoder_out.append(out)
@@ -155,13 +161,13 @@ class Decoder(nn.Module):
 
 class KRNN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=1, use_pos_encode=True, parallel=10):
+                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=3, use_pos_encode=False, parallel=10):
         super(KRNN, self).__init__()
 
         self.encoder = KEncoder(net_cls=Encoder, parallel=parallel,
-                                num_nodes=num_nodes, num_features=num_features, num_timesteps_input=num_timesteps_input, hidden_size=hidden_size,
-                                overlap_size=overlap_size, use_pos_encode=use_pos_encode
-                                )
+                                        num_nodes=num_nodes, num_features=num_features, num_timesteps_input=num_timesteps_input, hidden_size=hidden_size,
+                                        overlap_size=overlap_size, use_pos_encode=use_pos_encode
+                                        )
 
         self.decoder = Decoder(num_timesteps_output, num_features,
                                overlap_size, use_pos_encode, hidden_size=hidden_size)
@@ -172,10 +178,10 @@ class KRNN(nn.Module):
 
         batch_size, num_nodes = X.size(0), X.size(1)
 
-        encoder_out, encoder_hid, last = self.encoder(X)
 
-        encoder_out = encoder_out.reshape(
-            encoder_out.size(0), -1, encoder_out.size(-1))
+        encoder_out, encoder_hid, last = self.encoder(X)
+        
+        encoder_out = encoder_out.reshape(encoder_out.size(0), -1, encoder_out.size(-1))
         encoder_hid = encoder_hid.reshape(-1, encoder_hid.size(-1))
         last = last.reshape(-1, last.size(-1))
 

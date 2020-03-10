@@ -19,8 +19,6 @@ from torch.utils.data.distributed import DistributedSampler
 
 from stgcn import STGCN
 from tgcn import TGCN
-from localrnn import LocalRNN
-from globalrnn import GlobalRNN
 from krnn import KRNN
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 
@@ -61,8 +59,7 @@ if args.enable_cuda and torch.cuda.is_available():
 else:
     args.device = torch.device('cpu')
 
-model = {'tgcn': TGCN, 'stgcn': STGCN, 'localrnn': LocalRNN,
-         'globalrnn': GlobalRNN, 'krnn': KRNN}.get(args.model)
+model = {'tgcn': TGCN, 'stgcn': STGCN, 'krnn': KRNN}.get(args.model)
 
 backend = args.backend
 log_name = args.log_name

@@ -7,16 +7,21 @@ from torch_geometric.nn import GCNConv, ChebConv
 class GCNBlock(nn.Module):
     def __init__(self, in_channels, spatial_channels, num_nodes, gcn_type):
         super(GCNBlock, self).__init__()
+        self.gcn1 = GCNConv(in_channels=in_channels,
+                            out_channels=spatial_channels,
+                            node_dim=1)
+        self.gcn2 = GCNConv(in_channels=spatial_channels,
+                            out_channels=spatial_channels,
+                            node_dim=1)
         if gcn_type == 'cheb':
-            GCNCell = ChebConv
-        else:
-            GCNCell = GCNConv
-        self.gcn1 = GCNCell(in_channels=in_channels,
-                            out_channels=spatial_channels,
-                            node_dim=1)
-        self.gcn2 = GCNCell(in_channels=spatial_channels,
-                            out_channels=spatial_channels,
-                            node_dim=1)
+            self.gcn1 = ChebConv(in_channels=in_channels,
+                                out_channels=spatial_channels,
+                                K=3,
+                                node_dim=1)
+            self.gcn2 = ChebConv(in_channels=spatial_channels,
+                                out_channels=spatial_channels,
+                                K=3,
+                                node_dim=1)
         
     def forward(self, X, edge_index, edge_weight=None):
         """

@@ -61,12 +61,14 @@ class STGCNBlock(nn.Module):
         super(STGCNBlock, self).__init__()
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
+        self.gcn = GCNConv(in_channels=in_channels,
+                            out_channels=spatial_channels,
+                            node_dim=1)
         if gcn_type == 'cheb':
-            GCNCell = ChebConv
-        else:
-            GCNCell = GCNConv
-        self.gcn = GCNCell(in_channels=out_channels,
-                           out_channels=spatial_channels, node_dim=1)
+            self.gcn = ChebConv(in_channels=in_channels,
+                                out_channels=spatial_channels,
+                                K=3,
+                                node_dim=1)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)

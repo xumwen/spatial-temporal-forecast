@@ -186,7 +186,7 @@ class KSeq2Seq(nn.Module):
 
 class KRNN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=3, use_pos_encode=True, parallel=10):
+                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=1, use_pos_encode=False, parallel=10):
         super(KRNN, self).__init__()
 
         self.seq2seq = KSeq2Seq(num_nodes, num_features, num_timesteps_input,

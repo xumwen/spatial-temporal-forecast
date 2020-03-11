@@ -35,7 +35,7 @@ parser.add_argument('--gpus', type=int, default=1,
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-                    help='Choose dataset', default='nyc-bike')
+                    help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
                     help='Choose GCN Conv Type', default='normal')
 parser.add_argument('-batch_size', type=int, default=64,
@@ -44,7 +44,7 @@ parser.add_argument('-epochs', type=int, default=1000,
                     help='Training epochs')
 parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae'],
                     help='Choose loss criterion', default='mse')
-parser.add_argument('-num_timesteps_input', type=int, default=15,
+parser.add_argument('-num_timesteps_input', type=int, default=12,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
                     help='Num of output timesteps for forecasting')

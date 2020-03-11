@@ -23,8 +23,6 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
-parser.add_argument('--enable-cuda', action='store_true',
-                    help='Enable CUDA')
 parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
@@ -36,16 +34,16 @@ parser.add_argument('--gpus', type=int, default=1,
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-                    help='Choose dataset', default='nyc-bike')
+                    help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
-                    help='Choose GCN Conv Type', default='normal')
+                    help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-batch_size', type=int, default=64,
                     help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
                     help='Training epochs')
 parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae'],
                     help='Choose loss criterion', default='mse')
-parser.add_argument('-num_timesteps_input', type=int, default=15,
+parser.add_argument('-num_timesteps_input', type=int, default=12,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
@@ -53,7 +51,7 @@ parser.add_argument('-early_stop_rounds', type=int, default=30,
                     help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
-if args.enable_cuda and torch.cuda.is_available():
+if torch.cuda.is_available():
     args.device = torch.device('cuda')
 else:
     args.device = torch.device('cpu')

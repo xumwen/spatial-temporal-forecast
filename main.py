@@ -23,8 +23,6 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
-parser.add_argument('--enable-cuda', action='store_true',
-                    help='Enable CUDA')
 parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
@@ -53,7 +51,7 @@ parser.add_argument('-early_stop_rounds', type=int, default=30,
                     help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
-if args.enable_cuda and torch.cuda.is_available():
+if torch.cuda.is_available():
     args.device = torch.device('cuda')
 else:
     args.device = torch.device('cpu')

@@ -7,7 +7,7 @@ import numpy as np
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_nodes, num_features, num_timesteps_input, hidden_size, overlap_size, use_pos_encode):
+    def __init__(self, num_features, num_timesteps_input, hidden_size, overlap_size, use_pos_encode):
         super(Encoder, self).__init__()
 
         self.num_features = num_features
@@ -57,53 +57,17 @@ class Encoder(nn.Module):
 
         out, hidden = self.rnn(encode_inputs)
 
+        # extract last input of encoder, used for decoder
+        # 0 indicates target dim
         last = inputs.view(inputs.size(0), inputs.size(1),
                            self.overlap_size, self.num_features
                            )[-1, :, :, 0]
 
-        return out, hidden, last
-
-
-class KEncoder(nn.Module):
-    def __init__(self, net_cls, parallel, **kwargs):
-        super(KEncoder, self).__init__()
-        self.module_list = nn.ModuleList()
-        for idx in range(parallel):
-            self.module_list.append(net_cls(**kwargs))
-
-        num_nodes = kwargs['num_nodes']
-
-        self.attn = nn.Parameter(torch.FloatTensor(num_nodes, parallel))
-        self.attn.data.normal_()
-
-    def forward(self, X):
-        inputs = X.view(-1, X.size(2), X.size(3))
-
-        out_lst, hidden_lst = [], []
-        for idx in range(len(self.module_list)):
-            out, hidden, last = self.module_list[idx](inputs)
-
-            out = out.view(out.size(0), X.size(0), X.size(1), out.size(2))
-            hidden = hidden.view(hidden.size(0), X.size(0),
-                                 X.size(1), hidden.size(2))
-            last = last.view(X.size(0), X.size(1), last.size(1))
-
-            out_lst.append(out.unsqueeze(dim=-1))
-            hidden_lst.append(hidden.unsqueeze(dim=-1))
-
-        out_lst = torch.cat(out_lst, dim=-1)
-        hidden_lst = torch.cat(hidden_lst, dim=-1)
-
-        attn = torch.softmax(self.attn, dim=-1)
-
-        out = torch.einsum('ijklm,km->ijkl', out_lst, attn)
-        hidden = torch.einsum('ijklm,km->ijkl', hidden_lst, attn)
-
-        return out, hidden, last
+        return out, hidden, last.detach()
 
 
 class Decoder(nn.Module):
-    def __init__(self, num_timesteps_output, num_features, overlap_size, use_pos_encode, hidden_size=64):
+    def __init__(self, num_features, num_timesteps_output, hidden_size, overlap_size, use_pos_encode):
         super(Decoder, self).__init__()
 
         self.overlap_size = overlap_size
@@ -114,11 +78,10 @@ class Decoder(nn.Module):
         self.register_buffer('position', torch.arange(num_timesteps_output))
         self.pos_encode = nn.Embedding(num_timesteps_output, 4)
 
-        rnn_input_size = overlap_size + \
-            4 * int(use_pos_encode)
+        rnn_input_size = overlap_size + 4 * int(use_pos_encode)
 
         self.rnn_cell = nn.GRUCell(rnn_input_size, hidden_size)
-        self.linear = nn.Linear(hidden_size, 1)
+        self.linear = nn.Linear(hidden_size * 2, 1)
 
     def forward(self, encoder_out, encoder_hid, last):
         '''
@@ -150,41 +113,84 @@ class Decoder(nn.Module):
 
             hidden = self.rnn_cell(decode_last, hidden)
 
-            out = self.linear(hidden)
+            out = self.linear(torch.cat([hidden, context], dim=-1))
             decoder_out.append(out)
 
-            last.data[:, 0] = out.view(-1, ).data
+            # roll last value
+            last = torch.cat(
+                [out.detach(), last[:, :self.overlap_size - 1]], dim=-1
+            )
 
         decoder_out = torch.cat(decoder_out, dim=-1)
         return decoder_out
 
 
-class KRNN(nn.Module):
-    def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=3, use_pos_encode=False, parallel=10):
-        super(KRNN, self).__init__()
+class Seq2Seq(nn.Module):
+    def __init__(self, num_nodes, num_features, num_timesteps_input, num_timesteps_output, hidden_size, overlap_size, use_pos_encode):
+        super(Seq2Seq, self).__init__()
 
-        self.encoder = KEncoder(net_cls=Encoder, parallel=parallel,
-                                        num_nodes=num_nodes, num_features=num_features, num_timesteps_input=num_timesteps_input, hidden_size=hidden_size,
-                                        overlap_size=overlap_size, use_pos_encode=use_pos_encode
-                                        )
+        self.encoder = Encoder(
+            num_features, num_timesteps_input, hidden_size, overlap_size, use_pos_encode)
+        self.decoder = Decoder(
+            num_features, num_timesteps_output, hidden_size, overlap_size, use_pos_encode)
 
-        self.decoder = Decoder(num_timesteps_output, num_features,
-                               overlap_size, use_pos_encode, hidden_size=hidden_size)
-
-    def forward(self, A, X):
-        # shape of out (num_tmiesteps_input, batch_size, num_nodes, hidden_size)
-        # shape of hidden (1, batch_size, num_nodes, hidden_size)
-
-        batch_size, num_nodes = X.size(0), X.size(1)
-
-
+    def forward(self, X):
+        '''
+        :param: X of shape (batch_size, num_timesteps_input, num_features)
+        '''
         encoder_out, encoder_hid, last = self.encoder(X)
-        
-        encoder_out = encoder_out.reshape(encoder_out.size(0), -1, encoder_out.size(-1))
-        encoder_hid = encoder_hid.reshape(-1, encoder_hid.size(-1))
-        last = last.reshape(-1, last.size(-1))
+
+        encoder_hid = encoder_hid.squeeze(dim=0)
 
         decoder_out = self.decoder(encoder_out, encoder_hid, last)
-        decoder_out = decoder_out.view(batch_size, num_nodes, -1)
+
         return decoder_out
+
+
+class KSeq2Seq(nn.Module):
+    def __init__(self, num_nodes, num_features, num_timesteps_input, num_timesteps_output, hidden_size, overlap_size, use_pos_encode, parallel):
+        super(KSeq2Seq, self).__init__()
+
+        self.num_nodes = num_nodes
+        self.num_timesteps_output = num_timesteps_output
+
+        self.module_list = nn.ModuleList()
+        for rep in range(parallel):
+            self.module_list.append(
+                Seq2Seq(num_nodes, num_features, num_timesteps_input,
+                        num_timesteps_output, hidden_size, overlap_size, use_pos_encode)
+            )
+
+        self.attn = nn.Parameter(torch.FloatTensor(num_nodes, parallel))
+        self.attn.data.normal_()
+
+    def forward(self, X):
+        # reshape to (batch_size * num_nodes, num_timesteps_input, num_features)
+        inputs = X.view(-1, X.size(2), X.size(3))
+
+        outs = []
+
+        for idx in range(len(self.module_list)):
+            out = self.module_list[idx](inputs)
+            out = out.view(-1, self.num_nodes, self.num_timesteps_output)
+
+            outs.append(out.unsqueeze(dim=-1))
+
+        outs = torch.cat(outs, dim=-1)
+        attn = torch.softmax(self.attn, dim=-1)
+
+        outs = torch.einsum('ijkl,jl->ijk', outs, attn)
+
+        return outs
+
+
+class KRNN(nn.Module):
+    def __init__(self, num_nodes, num_features, num_timesteps_input,
+                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=3, use_pos_encode=True, parallel=10):
+        super(KRNN, self).__init__()
+
+        self.seq2seq = KSeq2Seq(num_nodes, num_features, num_timesteps_input,
+                                num_timesteps_output, hidden_size, overlap_size, use_pos_encode, parallel)
+
+    def forward(self, A, X):
+        return self.seq2seq(X)

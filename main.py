@@ -50,7 +50,7 @@ parser.add_argument('-num_timesteps_input', type=int, default=15,
                     help='Num of input timesteps')
 parser.add_argument('-num_timesteps_output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
-parser.add_argument('-early_stop_rounds', type=int, default=30,
+parser.add_argument('-early_stop_rounds', type=int, default=10,
                     help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
@@ -59,7 +59,7 @@ if args.enable_cuda and torch.cuda.is_available():
 else:
     args.device = torch.device('cpu')
 
-model = {'tgcn': TGCN, 'stgcn': STGCN, 'krnn': KRNN}.get(args.model)
+model = {'tgcn': TGCN, 'stgcn': STGCN}.get(args.model)
 
 backend = args.backend
 log_name = args.log_name

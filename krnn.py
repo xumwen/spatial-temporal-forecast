@@ -81,7 +81,7 @@ class Decoder(nn.Module):
         rnn_input_size = overlap_size + 4 * int(use_pos_encode)
 
         self.rnn_cell = nn.GRUCell(rnn_input_size, hidden_size)
-        self.linear = nn.Linear(hidden_size * 2, 1)
+        self.linear = nn.Linear(hidden_size, 1)
 
     def forward(self, encoder_out, encoder_hid, last):
         '''
@@ -113,7 +113,7 @@ class Decoder(nn.Module):
 
             hidden = self.rnn_cell(decode_last, hidden)
 
-            out = self.linear(torch.cat([hidden, context], dim=-1))
+            out = self.linear(hidden)
             decoder_out.append(out)
 
             # roll last value
@@ -166,7 +166,7 @@ class KSeq2Seq(nn.Module):
 
     def forward(self, X):
         # reshape to (batch_size * num_nodes, num_timesteps_input, num_features)
-        inputs = X.view(-1, X.size(2), X.size(3))
+        inputs = X.reshape(-1, X.size(2), X.size(3))
 
         outs = []
 
@@ -186,11 +186,11 @@ class KSeq2Seq(nn.Module):
 
 class KRNN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal', hidden_size=64, overlap_size=1, use_pos_encode=False, parallel=10):
+                 num_timesteps_output, hidden_size=64, overlap_size=3, use_pos_encode=False, parallel=10):
         super(KRNN, self).__init__()
 
         self.seq2seq = KSeq2Seq(num_nodes, num_features, num_timesteps_input,
                                 num_timesteps_output, hidden_size, overlap_size, use_pos_encode, parallel)
 
-    def forward(self, A, X):
+    def forward(self, X):
         return self.seq2seq(X)

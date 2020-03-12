@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+import torch_geometric.nn as PyG
+from torch_geometric.data import Data, Batch, DataLoader
 
 class GCNConv(nn.Module):
     """
@@ -106,3 +108,68 @@ class ChebConv(nn.Module):
             Tx_0, Tx_1 = Tx_1, Tx_2
 
         return out
+
+
+class PyGConv(nn.Module):
+    """
+    Applies a graph convolution implemented by pytorch geometric to a batch of nodes.
+    """
+    def __init__(self, in_channels, out_channels, gcn_type):
+        """
+        :param in_channels: Number of input features at each node.
+        :param out_channels: Desired number of output channels at each node.
+        """
+        super(PyGConv, self).__init__()
+
+        # Use edge_weight argument in forward
+        self.adj_available = True
+        self.batch_training = True
+        self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
+
+        if gcn_type == 'gat':
+            self.adj_available = False
+        if gcn_type not in ['normal', 'cheb', 'graph']:
+            self.batch_training = False
+        if gcn_type == 'cheb':
+            self.kwargs['K'] = 3
+        if gcn_type in ['normal', 'cheb', 'graph']:
+            self.kwargs['node_dim'] = 1
+        
+        GCNCell = {'normal':PyG.GCNConv, 
+                    'cheb':PyG.ChebConv,
+                    'sage':PyG.SAGEConv, 
+                    'graph':PyG.GraphConv,
+                    'gat':PyG.GATConv}\
+                    .get(gcn_type)
+        
+        self.gcn = GCNCell(**self.kwargs)
+    
+    def get_batch(self, X):
+        # Wrap input node and edge features, along with the single edge_index, into a `torch_geometric.data.Batch` instance
+        batch_size = X.shape[0]
+        data_list = [Data(x=x) for x in X]
+
+        return Batch.from_data_list(data_list)
+
+    def forward(self, X, edge_index, edge_weight):
+        """
+        :param X: Input data of shape (batch_size, num_nodes, in_channels)
+        :param edge_index: Graph connectivity in COO format with shape(2, num_edges)
+        :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
+        :return: Output data of shape (batch_size, num_nodes, out_channels)
+        """
+        if self.batch_training:
+            if self.adj_available:
+                out = self.gcn(X, edge_index, edge_weight)
+            else:
+                out = self.gcn(X, edge_index)
+        else:
+            # Currently, several conv cannot use argument node_dim to batch training
+            # This is a temp solution but it's very very very slow!
+            batch = self.get_batch(X)
+            if self.adj_available:
+                out = self.gcn(batch.x, edge_index, edge_weight)
+            else:
+                out = self.gcn(batch.x, edge_index)
+        
+        return out.view(X.shape[0], X.shape[1], -1)

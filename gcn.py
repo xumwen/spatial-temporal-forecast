@@ -118,22 +118,22 @@ class PyGConv(nn.Module):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
+        :param gcn_type: Choose GCN type.
         """
         super(PyGConv, self).__init__()
 
         # Use edge_weight argument in forward
         self.adj_available = True
-        self.batch_training = True
+        self.batch_training = False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
         if gcn_type == 'gat':
             self.adj_available = False
-        if gcn_type not in ['normal', 'cheb', 'graph']:
-            self.batch_training = False
+        if gcn_type in ['normal', 'cheb', 'graph']:
+            self.batch_training = True
+            self.kwargs['node_dim'] = 1
         if gcn_type == 'cheb':
             self.kwargs['K'] = 3
-        if gcn_type in ['normal', 'cheb', 'graph']:
-            self.kwargs['node_dim'] = 1
         
         GCNCell = {'normal':PyG.GCNConv, 
                     'cheb':PyG.ChebConv,

@@ -35,7 +35,8 @@ parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
                     help='Choose dataset', default='metr')
-parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
+parser.add_argument('-t', "--gcn_type", 
+                    choices=['normal', 'cheb', 'sage', 'graph', 'gat'],
                     help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-batch_size', type=int, default=64,
                     help='Training batch size')

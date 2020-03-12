@@ -2,7 +2,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, ChebConv
+from torch_geometric.data import Data as gData
+from torch_geometric.data import Batch
+from gcn import PyGConv
 
 
 class TimeBlock(nn.Module):
@@ -59,16 +61,12 @@ class STGCNBlock(nn.Module):
         :param num_nodes: Number of nodes in the graph.
         """
         super(STGCNBlock, self).__init__()
+        self.adj_available = True
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
-        self.gcn = GCNConv(in_channels=out_channels,
+        self.gcn = PyGConv(in_channels=out_channels,
                             out_channels=spatial_channels,
-                            node_dim=1)
-        if gcn_type == 'cheb':
-            self.gcn = ChebConv(in_channels=out_channels,
-                                out_channels=spatial_channels,
-                                K=3,
-                                node_dim=1)
+                            gcn_type=gcn_type)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)

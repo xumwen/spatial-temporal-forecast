@@ -2,26 +2,18 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, ChebConv
+from gcn import PyGConv
 
 class GCNBlock(nn.Module):
     def __init__(self, in_channels, spatial_channels, num_nodes, gcn_type):
         super(GCNBlock, self).__init__()
-        self.gcn1 = GCNConv(in_channels=in_channels,
+        self.out_channels = spatial_channels
+        self.gcn1 = PyGConv(in_channels=in_channels,
                             out_channels=spatial_channels,
-                            node_dim=1)
-        self.gcn2 = GCNConv(in_channels=spatial_channels,
+                            gcn_type=gcn_type)
+        self.gcn2 = PyGConv(in_channels=spatial_channels,
                             out_channels=spatial_channels,
-                            node_dim=1)
-        if gcn_type == 'cheb':
-            self.gcn1 = ChebConv(in_channels=in_channels,
-                                out_channels=spatial_channels,
-                                K=3,
-                                node_dim=1)
-            self.gcn2 = ChebConv(in_channels=spatial_channels,
-                                out_channels=spatial_channels,
-                                K=3,
-                                node_dim=1)
+                            gcn_type=gcn_type)
         
     def forward(self, X, edge_index, edge_weight=None):
         """
@@ -34,6 +26,7 @@ class GCNBlock(nn.Module):
         t1 = X.permute(0, 2, 1, 3).contiguous().view(-1, X.shape[1], X.shape[3])
         t2 = F.relu(self.gcn1(t1, edge_index, edge_weight))
         t3 = torch.sigmoid(self.gcn2(t2, edge_index, edge_weight))
+        
         out = t3.view(X.shape[0], X.shape[2], t3.shape[1], t3.shape[2]).permute(0, 2, 1, 3)
 
         return out

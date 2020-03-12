@@ -32,7 +32,7 @@ class GCNConv(nn.Module):
         D[D <= 10e-5] = 10e-5
         diag = torch.reciprocal(torch.sqrt(D))
         A_wave = diag.view((-1, 1)) * A_hat * diag.view((1, -1))
-        
+
         return A_wave
     
     def forward(self, X, A):

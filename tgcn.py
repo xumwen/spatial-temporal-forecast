@@ -28,8 +28,8 @@ class GCNBlock(nn.Module):
         """
         t1 = X.permute(0, 2, 1, 3).contiguous(
         ).view(-1, X.shape[1], X.shape[3])
-        t2 = F.relu(self.gcn1(t1, A))
-        t3 = torch.sigmoid(self.gcn2(t2, A))
+        t2 = F.leaky_relu(self.gcn1(t1, A))
+        t3 = F.leaky_relu(self.gcn2(t2, A))
         out = t3.view(X.shape[0], X.shape[2], t3.shape[1],
                       t3.shape[2]).permute(0, 2, 1, 3)
 

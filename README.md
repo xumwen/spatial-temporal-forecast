@@ -22,7 +22,9 @@ And there is a little refactoring on it.
   
   * PyTorch
   * NumPy
-  * Matplotlib
+  * Pytorch_geometric
+  * Pytorch_lightning
+  * TestTube
   
  ## Example Dataset
   
@@ -37,6 +39,7 @@ Example data is [201307-201402-citibike-tripdata.zip](https://s3.amazonaws.com/t
 
  ## Commands
 ```
-python main_old.py -m gwnet -d metr
+python main.py -m gwnet -d metr
+python main.py -m stgcn -d nyc-bike -t cheb -p pyg
 ```
 

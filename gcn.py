@@ -163,7 +163,7 @@ class PyGConv(nn.Module):
             else:
                 out = self.gcn(X, edge_index)
         else:
-            # Currently, several conv cannot use argument node_dim to batch training
+            # Currently, conv in [SAGEConv, GATConv] cannot use argument node_dim for batch training
             # This is a temp solution but it's very very very slow!
             batch = self.get_batch(X)
             if self.adj_available:

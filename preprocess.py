@@ -188,9 +188,9 @@ def generate_dataset(X, num_timesteps_input, num_timesteps_output):
     num_timesteps)
     :return:
         - Node features divided into multiple samples. Shape is
-          (num_samples, num_vertices, num_features, num_timesteps_input).
+          (num_samples, num_vertices, num_timesteps_input, num_features).
         - Node targets for the samples. Shape is
-          (num_samples, num_vertices, num_features, num_timesteps_output).
+          (num_samples, num_vertices, num_timesteps_output).
     """
     # Generate the beginning index and the ending index of a sample, which
     # contains (num_points_for_training + num_points_for_predicting) points

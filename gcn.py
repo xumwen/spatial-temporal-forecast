@@ -112,7 +112,7 @@ class ChebConv(nn.Module):
 
 class PyGConv(nn.Module):
     """
-    Applies a graph convolution implemented by pytorch geometric to a batch of nodes.
+    Choose GCN implemented by pytorch-geometric and apply to a batch of nodes.
     """
     def __init__(self, in_channels, out_channels, gcn_type):
         """
@@ -146,7 +146,6 @@ class PyGConv(nn.Module):
     
     def get_batch(self, X):
         # Wrap input node and edge features, along with the single edge_index, into a `torch_geometric.data.Batch` instance
-        batch_size = X.shape[0]
         data_list = [Data(x=x) for x in X]
 
         return Batch.from_data_list(data_list)
@@ -173,3 +172,40 @@ class PyGConv(nn.Module):
                 out = self.gcn(batch.x, edge_index)
         
         return out.view(X.shape[0], X.shape[1], -1)
+
+class GCNUnit(nn.Module):
+    """
+    Choose GCNUnit with package and type.
+    """
+    def __init__(self, in_channels, out_channels, gcn_type, gcn_package):
+        """
+        :param in_channels: Number of input features at each node.
+        :param out_channels: Desired number of output channels at each node.
+        :param gcn_type: Choose GCN type.
+        :param gcn_package: Choose GCN package in ['pyg', 'ours'].
+        """
+        super(GCNUnit, self).__init__()
+        self.adj_type = 'sparse'
+        if gcn_package == 'pyg':
+            self.gcn = PyGConv(in_channels=in_channels,
+                                out_channels=out_channels,
+                                gcn_type=gcn_type)
+        else:
+            self.adj_type = 'dense'
+            GCNCell = {'normal':GCNConv, 'cheb':ChebConv}\
+                .get(gcn_type)
+            self.gcn = GCNCell(in_channels=in_channels,
+                                out_channels=out_channels)
+
+    def forward(self, X, A=None, edge_index=None, edge_weight=None):
+        """
+        :param X: Input data of shape (batch_size, num_nodes, in_channels)
+        :param **kwargs: Additional arguments(dense or sparse adj matrix).
+        :return: Output data of shape (batch_size, num_nodes, out_channels)
+        """
+        if self.adj_type == 'sparse':
+            out = self.gcn(X, edge_index=edge_index, edge_weight=edge_weight)
+        else:
+            out = self.gcn(X, A=A)
+        
+        return out

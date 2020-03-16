@@ -19,12 +19,11 @@ from torch.utils.data.distributed import DistributedSampler
 
 from stgcn import STGCN
 from tgcn import TGCN
+from gwnet import GWNET
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
-parser.add_argument('--enable-cuda', action='store_true',
-                    help='Enable CUDA')
 parser.add_argument('--backend', choices=['dp', 'ddp'],
                     help='Backend for data parallel', default='ddp')
 parser.add_argument('--log-name', type=str, default='default',
@@ -33,35 +32,36 @@ parser.add_argument('--log-dir', type=str, default='./logs',
                     help='Path to log dir')
 parser.add_argument('--gpus', type=int, default=1,
                     help='Number of GPUs to use')
-parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn'],
+parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'],
                     help='Choose Spatial-Temporal model', default='stgcn')
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
-                    help='Choose dataset', default='nyc-bike')
-parser.add_argument('-t', "--gcn_type", choices=['normal', 'cheb'],
-                    help='Choose GCN Conv Type', default='normal')
-parser.add_argument('-batch_size', type=int, default=64,
+                    help='Choose dataset', default='metr')
+parser.add_argument('-t', "--gcn-type", 
+                    choices=['normal', 'cheb', 'sage', 'graph', 'gat'],
+                    help='Choose GCN Conv Type', default='cheb')
+parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
+                    help='Choose GCN implemented package',
+                    default='ours')
+parser.add_argument('-batchsize', type=int, default=64,
                     help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
                     help='Training epochs')
-parser.add_argument('-l', '--loss_criterion', choices=['mse', 'mae'],
+parser.add_argument('-l', '--loss-criterion', choices=['mse', 'mae'],
                     help='Choose loss criterion', default='mse')
-parser.add_argument('-num_timesteps_input', type=int, default=15,
+parser.add_argument('-num-timesteps-input', type=int, default=12,
                     help='Num of input timesteps')
-parser.add_argument('-num_timesteps_output', type=int, default=3,
+parser.add_argument('-num-timesteps-output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
-parser.add_argument('-early_stop_rounds', type=int, default=30,
+parser.add_argument('-early-stop-rounds', type=int, default=30,
                     help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()
-if args.enable_cuda and torch.cuda.is_available():
+if torch.cuda.is_available():
     args.device = torch.device('cuda')
 else:
     args.device = torch.device('cpu')
-if args.model == 'tgcn':
-    model = TGCN
-else:
-    model = STGCN
-
+    
+model = {'tgcn':TGCN, 'stgcn':STGCN, 'gwnet':GWNET}.get(args.model)
 backend = args.backend
 log_name = args.log_name
 log_dir = args.log_dir
@@ -70,7 +70,8 @@ gpus = args.gpus
 loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
     .get(args.loss_criterion)
 gcn_type = args.gcn_type
-batch_size = args.batch_size
+gcn_package = args.gcn_package
+batch_size = args.batchsize
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
 num_timesteps_output = args.num_timesteps_output
@@ -88,14 +89,14 @@ class WrapperNet(pl.LightningModule):
             hparams.num_features,
             hparams.num_timesteps_input,
             hparams.num_timesteps_output,
-            hparams.gcn_type
+            hparams.gcn_type,
+            hparams.gcn_package
         )
 
-        self.register_buffer('A', torch.Tensor(
-            hparams.num_nodes, hparams.num_nodes).float())
-
-    def init_graph(self, A):
-        self.A.copy_(A)
+    def init_graph(self, A, edge_index, edge_weight):
+        self.register_buffer('A', A)
+        self.register_buffer('edge_index', edge_index)
+        self.register_buffer('edge_weight', edge_weight)
 
     def init_data(self, training_input, training_target, val_input, val_target, test_input, test_target):
         print('preparing data...')
@@ -130,7 +131,9 @@ class WrapperNet(pl.LightningModule):
         return self.make_dataloader(self.test_input, self.test_target, shuffle=False, backend='dp')
 
     def forward(self, X):
-        return self.net(self.A, X)
+        return self.net(X, A=self.A, 
+                        edge_index=self.edge_index, 
+                        edge_weight=self.edge_weight)
 
     def training_step(self, batch, batch_idx):
         X, y = batch
@@ -176,6 +179,7 @@ if __name__ == '__main__':
     print("model:", args.model)
     print("dataset:", args.dataset)
     print("gcn type:", args.gcn_type)
+    print("gcn package:", args.gcn_package)
     torch.manual_seed(7)
 
     if args.dataset == "metr":
@@ -201,6 +205,9 @@ if __name__ == '__main__':
                                                num_timesteps_output=num_timesteps_output)
 
     A = torch.from_numpy(A)
+    sparse_A = A.to_sparse()
+    edge_index = sparse_A._indices()
+    edge_weight = sparse_A._values()
 
     hparams = Namespace(**{
         'num_nodes': A.shape[0],
@@ -208,6 +215,7 @@ if __name__ == '__main__':
         'num_timesteps_input': num_timesteps_input,
         'num_timesteps_output': num_timesteps_output,
         'gcn_type': gcn_type,
+        'gcn_package': gcn_package
     })
 
     net = WrapperNet(hparams)
@@ -218,7 +226,7 @@ if __name__ == '__main__':
         test_input, test_target
     )
 
-    net.init_graph(A)
+    net.init_graph(A, edge_index, edge_weight)
 
     early_stop_callback = EarlyStopping(patience=early_stop_rounds)
     logger = TestTubeLogger(save_dir=log_dir, name=log_name)

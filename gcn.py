@@ -75,10 +75,10 @@ class ChebConv(nn.Module):
         Returns the normalized and scaled adjacency matrix.
         Formula: L = I - D^(-1/2) * A * D^(-1/2), L_hat = (2L / lambda_max) - I
         """
-        I = torch.ones(A.shape[0]).to(A.device)
+        I = torch.diag(torch.ones(A.shape[0])).to(A.device)
         # Remove self-loops
-        if A[0][0] != 0:
-            A = A - torch.diag(A[0][0] * I)
+        A = A - A[0][0] * I
+        
         D = A.sum(1).view((-1,))
         D[D <= 10e-5] = 10e-5
         diag = torch.reciprocal(torch.sqrt(D))

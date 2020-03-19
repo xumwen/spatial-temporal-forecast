@@ -49,9 +49,10 @@ class MultiGCN(nn.Module):
 class GWNET(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
                  num_timesteps_output, gcn_type='normal', 
-                 dropout=0.3, num_adj=2, gcn_bool=True, 
-                 addaptadj=True, aptinit=None, residual_channels=32,
-                 dilation_channels=32, skip_channels=256, end_channels=512,
+                 gcn_package='ours', dropout=0.3, num_adj=2, 
+                 gcn_bool=True, addaptadj=True, aptinit=None, 
+                 residual_channels=32, dilation_channels=32, 
+                 skip_channels=256, end_channels=512,
                  kernel_size=2, blocks=4, layers=2):
         super(GWNET, self).__init__()
         self.dropout = dropout
@@ -135,7 +136,7 @@ class GWNET(nn.Module):
     def norm(self, A):
         return (A.t()/A.sum(1)).t()
 
-    def forward(self, A, input):
+    def forward(self, input, A, **kwargs):
         """
         :parms: input data of shape (batch_size, num_nodes, num_timesteps_input, in_channels)
         :return: output data of shape(batch_size, num_nodes, num_timesteps_output, out_channels)

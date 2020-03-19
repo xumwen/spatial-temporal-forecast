@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gcn import GCNConv, ChebConv
+from gcn import GCNUnit
 
 
 class TimeBlock(nn.Module):
@@ -48,7 +48,7 @@ class STGCNBlock(nn.Module):
     """
 
     def __init__(self, in_channels, spatial_channels, out_channels,
-                 num_nodes, gcn_type):
+                num_nodes, gcn_type, gcn_package):
         """
         :param in_channels: Number of input features at each node in each time
         step.
@@ -61,28 +61,26 @@ class STGCNBlock(nn.Module):
         super(STGCNBlock, self).__init__()
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
-        if gcn_type == 'cheb':
-            GCNCell = ChebConv
-        else:
-            GCNCell = GCNConv
-        self.gcn = GCNCell(in_channels=out_channels,
-                           out_channels=spatial_channels)
+        self.gcn = GCNUnit(in_channels=out_channels,
+                            out_channels=spatial_channels,
+                            gcn_type=gcn_type,
+                            gcn_package=gcn_package)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
 
-    def forward(self, X, A):
+    def forward(self, X, A, edge_index, edge_weight):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
-        :param A_hat: Normalized adjacency matrix.
+        :param A: Adjacency matrix.
         :return: Output data of shape (batch_size, num_nodes, num_timesteps_out,
         num_features=out_channels).
         """
         t1 = self.temporal1(X)
         # batch_size * timesteps -> batch_size
         t21 = t1.permute(0, 2, 1, 3).contiguous().view(-1, t1.shape[1], t1.shape[3])
-        t22 = F.relu(self.gcn(t21, A))
+        t22 = F.relu(self.gcn(t21, A, edge_index, edge_weight))
         # batch_size -> (batch_size, timesteps)
         t23 = t22.view(t1.shape[0], t1.shape[2], t22.shape[1], t22.shape[2]).permute(0, 2, 1, 3)
         t3 = self.temporal2(t23)
@@ -99,7 +97,7 @@ class STGCN(nn.Module):
     """
 
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal'):
+                 num_timesteps_output, gcn_type='cheb', gcn_package='pyg'):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -111,22 +109,22 @@ class STGCN(nn.Module):
         super(STGCN, self).__init__()
         self.block1 = STGCNBlock(in_channels=num_features, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
-                                 gcn_type=gcn_type)
+                                 gcn_type=gcn_type, gcn_package=gcn_package)
         self.block2 = STGCNBlock(in_channels=64, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
-                                 gcn_type=gcn_type)
+                                 gcn_type=gcn_type, gcn_package=gcn_package)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
         self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
                                num_timesteps_output)
 
-    def forward(self, A, X):
+    def forward(self, X, A=None, edge_index=None, edge_weight=None):
         """
         :param X: Input data of shape (batch_size, num_nodes, num_timesteps,
         num_features=in_channels).
         :param A: Normalized adjacency matrix.
         """
-        out1 = self.block1(X, A)
-        out2 = self.block2(out1, A)
+        out1 = self.block1(X, A, edge_index, edge_weight)
+        out2 = self.block2(out1, A, edge_index, edge_weight)
         out3 = self.last_temporal(out2)
         out4 = self.fully(out3.reshape((out3.shape[0], out3.shape[1], -1)))
         return out4

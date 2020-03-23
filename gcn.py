@@ -122,7 +122,7 @@ class PyGConv(nn.Module):
         """
         super(PyGConv, self).__init__()
 
-        self.out_chennels = out_chennels
+        self.out_channels = out_channels
 
         # Use edge_weight argument in forward
         self.adj_available = True
@@ -165,16 +165,17 @@ class PyGConv(nn.Module):
         num_nodes = sz[1]
         if num_nodes >= 500:
             self.neighbor_sample = True
-        # Use NeighborSample() to iterates over graph nodes in a 
-        # mini-batch fashion and constructs sampled subgraphs
+        
         if self.neighbor_sample:
+            # Use NeighborSample() to iterates over graph nodes in a 
+            # mini-batch fashion and constructs sampled subgraphs
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+            data = Data(edge_index=edge_index, edge_weight=edge_weight, num_nodes=num_nodes)
             loader = NeighborSampler(data, size=[5, 5], num_hops=2, batch_size=10,
                          shuffle=True, add_self_loops=True)
             for data_flow in loader():
                 out[:, data_flow.n_id, :] = self.gcn(X, data_flow.to(device))
-        
-        if self.batch_training:
+        elif self.batch_training:
             if self.adj_available:
                 out = self.gcn(X, edge_index, edge_weight)
             else:

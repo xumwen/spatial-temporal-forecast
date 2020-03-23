@@ -109,12 +109,29 @@ class ChebConv(nn.Module):
 
         return out
 
+class SAGENet(torch.nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(SAGENet, self).__init__()
+        self.conv1 = PyG.SAGEConv(in_channels, out_channels, node_dim=1)
+        self.conv2 = PyG.SAGEConv(out_channels, out_channels, node_dim=1)
+
+    def forward(self, X, data_flow):
+        data = data_flow[0]
+        X = X[:, data.n_id]
+        X = F.relu(
+            self.conv1((X, None), data.edge_index, size=data.size,
+                       res_n_id=data.res_n_id))
+        X = F.dropout(X, p=0.5, training=self.training)
+        data = data_flow[1]
+        out = self.conv2((X, None), data.edge_index, size=data.size,
+                       res_n_id=data.res_n_id)
+        return out
 
 class PyGConv(nn.Module):
     """
     Choose GCN implemented by pytorch-geometric and apply to a batch of nodes.
     """
-    def __init__(self, in_channels, out_channels, gcn_type):
+    def __init__(self, in_channels, out_channels, gcn_type, neighbor_sample=True):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
@@ -128,25 +145,29 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.neighbor_sample = False
+        self.neighbor_sample = neighbor_sample
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
-        if gcn_type == 'gat':
-            self.adj_available = False
-        if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
-            self.batch_training = True
-            self.kwargs['node_dim'] = 1
-        if gcn_type == 'cheb':
-            self.kwargs['K'] = 3
-        
-        GCNCell = {'normal':PyG.GCNConv, 
-                    'cheb':PyG.ChebConv,
-                    'sage':PyG.SAGEConv, 
-                    'graph':PyG.GraphConv,
-                    'gat':PyG.GATConv}\
-                    .get(gcn_type)
-        
-        self.gcn = GCNCell(**self.kwargs)
+        if self.neighbor_sample:
+            assert gcn_type == 'sage'
+            self.gcn = SAGENet(**self.kwargs)
+        else:
+            if gcn_type == 'gat':
+                self.adj_available = False
+            if gcn_type in ['normal', 'cheb', 'graph']:
+                self.batch_training = True
+                self.kwargs['node_dim'] = 1
+            if gcn_type == 'cheb':
+                self.kwargs['K'] = 3
+            
+            GCNCell = {'normal':PyG.GCNConv, 
+                        'cheb':PyG.ChebConv,
+                        'sage':PyG.SAGEConv, 
+                        'graph':PyG.GraphConv,
+                        'gat':PyG.GATConv}\
+                        .get(gcn_type)
+            
+            self.gcn = GCNCell(**self.kwargs)
     
     def get_batch(self, X):
         # Wrap input node and edge features, along with the single edge_index, into a `torch_geometric.data.Batch` instance
@@ -161,24 +182,19 @@ class PyGConv(nn.Module):
         :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
-        sz = X.shape
-        num_nodes = sz[1]
-        if num_nodes >= 500:
-            self.neighbor_sample = True
-        
+
         if self.neighbor_sample:
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
             # and constructs sampled subgraphs
+            sz = X.shape
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
-            graph_data = Data(edge_index=edge_index, edge_weight=edge_weight, num_nodes=num_nodes)
-            loader = NeighborSampler(graph_data, size=[25], num_hops=1, batch_size=100,
+            graph_data = Data(edge_index=edge_index, edge_weight=edge_weight, num_nodes=sz[1]).to('cpu')
+            loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
                          shuffle=True, add_self_loops=True)
+
             for data_flow in loader():
-                data = data_flow[0]
-                out[:, data.res_n_id] = self.gcn((X[:, data.n_id], None), 
-                                                data.edge_index, 
-                                                size=data.size,
-                                                res_n_id=data.res_n_id)
+                out[:, data_flow.n_id] = self.gcn(X, data_flow.to(X.device))
+
         elif self.batch_training:
             if self.adj_available:
                 out = self.gcn(X, edge_index, edge_weight)

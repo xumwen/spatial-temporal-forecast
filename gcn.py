@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as PyG
-from torch_geometric.data import Data, Batch, DataLoader
+from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler
 
 class GCNConv(nn.Module):
     """
@@ -122,9 +122,13 @@ class PyGConv(nn.Module):
         """
         super(PyGConv, self).__init__()
 
+        self.out_chennels = out_chennels
+
         # Use edge_weight argument in forward
         self.adj_available = True
+        # Use node_dim argument for batch training
         self.batch_training = False
+        self.neighbor_sample = False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
         if gcn_type == 'gat':
@@ -157,6 +161,19 @@ class PyGConv(nn.Module):
         :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
+        sz = X.shape
+        num_nodes = sz[1]
+        if num_nodes >= 500:
+            self.neighbor_sample = True
+        # Use NeighborSample() to iterates over graph nodes in a 
+        # mini-batch fashion and constructs sampled subgraphs
+        if self.neighbor_sample:
+            out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+            loader = NeighborSampler(data, size=[5, 5], num_hops=2, batch_size=10,
+                         shuffle=True, add_self_loops=True)
+            for data_flow in loader():
+                out[:, data_flow.n_id, :] = self.gcn(X, data_flow.to(device))
+        
         if self.batch_training:
             if self.adj_available:
                 out = self.gcn(X, edge_index, edge_weight)

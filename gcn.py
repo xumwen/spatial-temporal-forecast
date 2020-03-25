@@ -196,8 +196,8 @@ class PyGConv(nn.Module):
         """
         if self.cluster:
             sz = X.shape
-            graph_data = Data(x=X, edge_index=edge_index, edge_weight=edge_weight, num_nodes=sz[1]).to('cpu')
-            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data')
+            graph_data = Data(x=X, edge_index=edge_index, edge_attr=edge_weight, num_nodes=sz[1]).to('cpu')
+            cluster_data = ClusterData(graph_data, num_parts=20, recursive=False, save_dir='./data')
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=6)
 
             for data in loader:
@@ -208,7 +208,7 @@ class PyGConv(nn.Module):
             # and constructs sampled subgraphs (use cpu for no CUDA version)
             sz = X.shape
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
-            graph_data = Data(edge_index=edge_index, edge_weight=edge_weight, num_nodes=sz[1]).to('cpu')
+            graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
             loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
                          shuffle=True, add_self_loops=True)
 

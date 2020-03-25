@@ -190,9 +190,9 @@ class PyGConv(nn.Module):
 
             for data_flow in loader():
                 block1 = data_flow[0]
-                t = self.gcn1(X, edge_index[block1.e_id], edge_weight[block1.e_id])
+                t = self.gcn1(X, edge_index[:, block1.e_id], edge_weight[block1.e_id])
                 block2 = data_flow[1]
-                part_out = self.gcn2(t, edge_index[block2.e_id], edge_weight[block2.e_id])
+                part_out = self.gcn2(t, edge_index[:, block2.e_id], edge_weight[block2.e_id])
                 out[:, data_flow.n_id] = part_out[:, data_flow.n_id]
 
         elif self.batch_training:

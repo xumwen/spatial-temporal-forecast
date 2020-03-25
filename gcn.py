@@ -128,7 +128,7 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.cluster = False if partition and gcn_type == 'sage' else False
+        self.cluster = True if partition and gcn_type == 'sage' else False
         self.neighbor_sample = True if partition and gcn_type == 'sage' and not self.cluster else False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
@@ -175,10 +175,10 @@ class PyGConv(nn.Module):
             cluster_data = ClusterData(graph_data, num_parts=20, recursive=False, save_dir='./data')
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
-            for data in loader:
-                batch = self.get_batch(X[:, data.train_mask])
-                part_out = self.gcn(batch.x, data.edge_index.to(X.device), data.edge_attr.to(X.device))
-                out[:, data.train_mask] = part_out.view(sz[0], -1, self.out_channels)
+            for subgraph in loader:
+                batch = self.get_batch(X[:, subgraph.train_mask])
+                part_out = self.gcn(batch.x, subgraph.edge_index.to(X.device), subgraph.edge_attr.to(X.device))
+                out[:, subgraph.train_mask] = part_out.view(sz[0], -1, self.out_channels)
 
         elif self.neighbor_sample:
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
@@ -198,6 +198,7 @@ class PyGConv(nn.Module):
                 out = self.gcn(X, edge_index, edge_weight)
             else:
                 out = self.gcn(X, edge_index)
+
         else:
             # Currently, conv in [SAGEConv, GATConv] cannot use argument node_dim for batch training
             # This is a temp solution but it's very very very slow!

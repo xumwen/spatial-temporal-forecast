@@ -128,7 +128,7 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.cluster = True if partition and gcn_type == 'sage' else False
+        self.cluster = False if partition and gcn_type == 'sage' else False
         self.neighbor_sample = True if partition and gcn_type == 'sage' and not self.cluster else False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
@@ -139,7 +139,7 @@ class PyGConv(nn.Module):
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph']:
+            if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -186,11 +186,13 @@ class PyGConv(nn.Module):
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
             loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
-                         shuffle=True, add_self_loops=True)
+                         shuffle=True, add_self_loops=False)
 
             for data_flow in loader():
-                t = self.gcn1(X, data_flow[0].edge_index.to(X.device), edge_weight=None)
-                part_out = self.gcn2(t, data_flow[1].edge_index.to(X.device), edge_weight=None)
+                block1 = data_flow[0]
+                t = self.gcn1(X, edge_index[block1.e_id], edge_weight[block1.e_id])
+                block2 = data_flow[1]
+                part_out = self.gcn2(t, edge_index[block2.e_id], edge_weight[block2.e_id])
                 out[:, data_flow.n_id] = part_out[:, data_flow.n_id]
 
         elif self.batch_training:

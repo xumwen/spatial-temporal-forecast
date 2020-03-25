@@ -166,7 +166,7 @@ class PyGConv(nn.Module):
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
+            if gcn_type in ['normal', 'cheb', 'graph']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -194,19 +194,22 @@ class PyGConv(nn.Module):
         :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
+        sz = X.shape
         if self.cluster:
-            sz = X.shape
-            graph_data = Data(x=X, edge_index=edge_index, edge_attr=edge_weight, num_nodes=sz[1]).to('cpu')
+            out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+            graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
+                                train_mask=torch.arange(0, sz[1]), num_nodes=sz[1])
             cluster_data = ClusterData(graph_data, num_parts=20, recursive=False, save_dir='./data')
-            loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=6)
+            loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
             for data in loader:
-                out = self.gcn(data.x, data.edge_index)
+                batch = self.get_batch(X[:, data.train_mask])
+                part_out = self.gcn(batch.x, data.edge_index.to(X.device), data.edge_attr.to(X.device))
+                out[:, data.train_mask] = part_out.view(sz[0], -1, self.out_channels)
 
         elif self.neighbor_sample:
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
             # and constructs sampled subgraphs (use cpu for no CUDA version)
-            sz = X.shape
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
             loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
@@ -228,8 +231,9 @@ class PyGConv(nn.Module):
                 out = self.gcn(batch.x, edge_index, edge_weight)
             else:
                 out = self.gcn(batch.x, edge_index)
+            out = out.view(sz[0], sz[1], -1)
         
-        return out.view(X.shape[0], X.shape[1], -1)
+        return out
 
 class GCNUnit(nn.Module):
     """

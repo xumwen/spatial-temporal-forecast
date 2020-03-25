@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as PyG
-from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler
+from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, ClusterData, ClusterLoader
 
 class GCNConv(nn.Module):
     """
@@ -156,7 +156,8 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.neighbor_sample = True if gcn_type == 'sage' else False
+        self.cluster = True if gcn_type == 'sage' else False
+        self.neighbor_sample = True if gcn_type == 'sage' and not self.cluster else False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
         if self.neighbor_sample:
@@ -165,7 +166,7 @@ class PyGConv(nn.Module):
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph']:
+            if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -193,8 +194,16 @@ class PyGConv(nn.Module):
         :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
+        if self.cluster:
+            sz = X.shape
+            graph_data = Data(x=X, edge_index=edge_index, edge_weight=edge_weight, num_nodes=sz[1]).to('cpu')
+            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data')
+            loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=6)
 
-        if self.neighbor_sample:
+            for data in loader:
+                out = self.gcn(data.x, data.edge_index)
+
+        elif self.neighbor_sample:
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
             # and constructs sampled subgraphs (use cpu for no CUDA version)
             sz = X.shape

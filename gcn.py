@@ -191,7 +191,7 @@ class PyGConv(nn.Module):
             for data_flow in loader():
                 t = self.gcn1(X, data_flow[0].edge_index.to(X.device), edge_weight=None)
                 part_out = self.gcn2(t, data_flow[1].edge_index.to(X.device), edge_weight=None)
-                out[:, data_flow.n_id] = part_out[data_flow.n_id]
+                out[:, data_flow.n_id] = part_out[:, data_flow.n_id]
 
         elif self.batch_training:
             if self.adj_available:

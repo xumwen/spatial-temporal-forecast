@@ -109,40 +109,12 @@ class ChebConv(nn.Module):
 
         return out
 
-class SAGENet(torch.nn.Module):
-    """
-    Use SAGEConv to apply GCN to a mini-batch.
-    """
-    def __init__(self, in_channels, out_channels):
-        """
-        :param in_channels: Number of input features at each node.
-        :param out_channels: Desired number of output channels at each node.
-        """
-        super(SAGENet, self).__init__()
-        self.conv1 = PyG.SAGEConv(in_channels, out_channels, node_dim=1)
-        self.conv2 = PyG.SAGEConv(out_channels, out_channels, node_dim=1)
-
-    def forward(self, X, data_flow):
-        """
-        :param X: Input data of shape (batch_size, num_nodes, in_channels)
-        :param data_flow: a nodes subset sampled by NeighborSampler
-        """
-        data = data_flow[0]
-        X = X[:, data.n_id]
-        X = F.relu(
-            self.conv1((X, None), data.edge_index, size=data.size,
-                       res_n_id=data.res_n_id))
-        X = F.dropout(X, p=0.5, training=self.training)
-        data = data_flow[1]
-        out = self.conv2((X, None), data.edge_index, size=data.size,
-                       res_n_id=data.res_n_id)
-        return out
 
 class PyGConv(nn.Module):
     """
     Choose GCN implemented by pytorch-geometric and apply to a batch of nodes.
     """
-    def __init__(self, in_channels, out_channels, gcn_type):
+    def __init__(self, in_channels, out_channels, gcn_type, partition=True):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
@@ -156,13 +128,14 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.cluster = True if gcn_type == 'sage' else False
-        self.neighbor_sample = True if gcn_type == 'sage' and not self.cluster else False
+        self.cluster = False if partition and gcn_type == 'sage' else False
+        self.neighbor_sample = True if partition and gcn_type == 'sage' and not self.cluster else False
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
         if self.neighbor_sample:
             assert gcn_type == 'sage'
-            self.gcn = SAGENet(**self.kwargs)
+            self.gcn1 = PyGConv(in_channels, out_channels, gcn_type, partition=False)
+            self.gcn2 = PyGConv(out_channels, out_channels, gcn_type, partition=False)
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
@@ -216,7 +189,9 @@ class PyGConv(nn.Module):
                          shuffle=True, add_self_loops=True)
 
             for data_flow in loader():
-                out[:, data_flow.n_id] = self.gcn(X, data_flow.to(X.device))
+                t = self.gcn1(X, data_flow[0].edge_index.to(X.device), edge_weight=None)
+                part_out = self.gcn2(t, data_flow[1].edge_index.to(X.device), edge_weight=None)
+                out[:, data_flow.n_id] = part_out[data_flow.n_id]
 
         elif self.batch_training:
             if self.adj_available:

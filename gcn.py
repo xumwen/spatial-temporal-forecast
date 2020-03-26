@@ -43,7 +43,7 @@ class GCNConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         A_wave = self.norm(A)
-        t = torch.einsum("ij,jkl->kil", [A, X.permute(1, 0, 2)])
+        t = torch.einsum("ij,jkl->kil", [A_wave, X.permute(1, 0, 2)])
         out = torch.matmul(t, self.weight)
         
         return out

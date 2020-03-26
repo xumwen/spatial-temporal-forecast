@@ -43,7 +43,7 @@ class GCNConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         A_wave = self.norm(A)
-        t = torch.einsum("ij,jkl->kil", [A_wave, X.permute(1, 0, 2)])
+        t = torch.einsum("ij,jkl->kil", [A, X.permute(1, 0, 2)])
         out = torch.matmul(t, self.weight)
         
         return out
@@ -114,11 +114,12 @@ class PyGConv(nn.Module):
     """
     Choose GCN implemented by pytorch-geometric and apply to a batch of nodes.
     """
-    def __init__(self, in_channels, out_channels, gcn_type, partition=True):
+    def __init__(self, in_channels, out_channels, gcn_type, gcn_partition=None):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
         :param gcn_type: Choose GCN type.
+        :param gcn_partition: Choose GCN partition method.
         """
         super(PyGConv, self).__init__()
 
@@ -128,18 +129,21 @@ class PyGConv(nn.Module):
         self.adj_available = True
         # Use node_dim argument for batch training
         self.batch_training = False
-        self.cluster = False if partition and gcn_type == 'sage' else False
-        self.neighbor_sample = True if partition and gcn_type == 'sage' and not self.cluster else False
+        # Use partition to train on mini-batch of sub-graph
+        self.gcn_partition = gcn_partition
         self.kwargs = {'in_channels':in_channels, 'out_channels':out_channels}
 
-        if self.neighbor_sample:
-            assert gcn_type == 'sage'
-            self.gcn1 = PyGConv(in_channels, out_channels, gcn_type, partition=False)
-            self.gcn2 = PyGConv(out_channels, out_channels, gcn_type, partition=False)
+        if self.gcn_partition == 'cluster':
+            self.gcn = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
+        elif self.gcn_partition == 'sample':
+            # Sampled edge are usually unsymmetric so only support spatial domain gcn
+            assert gcn_type in ['sage', 'graph', 'gat']
+            self.gcn1 = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
+            self.gcn2 = PyGConv(out_channels, out_channels, gcn_type, gcn_partition=None)
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
+            if gcn_type in ['normal', 'cheb', 'graph']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -168,24 +172,24 @@ class PyGConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         sz = X.shape
-        if self.cluster:
+        if self.gcn_partition == 'cluster':
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
                                 train_mask=torch.arange(0, sz[1]), num_nodes=sz[1])
-            cluster_data = ClusterData(graph_data, num_parts=20, recursive=False, save_dir='./data')
+            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data')
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
             for subgraph in loader:
-                batch = self.get_batch(X[:, subgraph.train_mask])
-                part_out = self.gcn(batch.x, subgraph.edge_index.to(X.device), subgraph.edge_attr.to(X.device))
-                out[:, subgraph.train_mask] = part_out.view(sz[0], -1, self.out_channels)
+                out[:, subgraph.train_mask] = self.gcn(X[:, subgraph.train_mask], 
+                                                subgraph.edge_index.to(X.device), 
+                                                subgraph.edge_attr.to(X.device))
 
-        elif self.neighbor_sample:
+        elif self.gcn_partition == 'sample':
             # Use NeighborSampler() to iterates over graph nodes in a mini-batch fashion 
             # and constructs sampled subgraphs (use cpu for no CUDA version)
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
-            loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
+            loader = NeighborSampler(graph_data, size=[10, 5], num_hops=2, batch_size=100,
                          shuffle=True, add_self_loops=False)
 
             for data_flow in loader():
@@ -204,6 +208,7 @@ class PyGConv(nn.Module):
         else:
             # Currently, conv in [SAGEConv, GATConv] cannot use argument node_dim for batch training
             # This is a temp solution but it's very very very slow!
+            # Costing about 6 times more than batch_training
             batch = self.get_batch(X)
             if self.adj_available:
                 out = self.gcn(batch.x, edge_index, edge_weight)
@@ -217,19 +222,21 @@ class GCNUnit(nn.Module):
     """
     Choose GCNUnit with package and type.
     """
-    def __init__(self, in_channels, out_channels, gcn_type, gcn_package):
+    def __init__(self, in_channels, out_channels, gcn_type, gcn_package, gcn_partition=None):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
         :param gcn_type: Choose GCN type.
         :param gcn_package: Choose GCN package in ['pyg', 'ours'].
+        :param gcn_partition: Choose GCN partition method in ['cluster', 'sample']
         """
         super(GCNUnit, self).__init__()
         self.adj_type = 'sparse'
         if gcn_package == 'pyg':
             self.gcn = PyGConv(in_channels=in_channels,
                                 out_channels=out_channels,
-                                gcn_type=gcn_type)
+                                gcn_type=gcn_type,
+                                gcn_partition=gcn_partition)
         else:
             self.adj_type = 'dense'
             GCNCell = {'normal':GCNConv, 'cheb':ChebConv}\

@@ -42,6 +42,9 @@ parser.add_argument('-t', "--gcn-type",
 parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
                     help='Choose GCN implemented package',
                     default='ours')
+parser.add_argument('-part', "--gcn-partition", choices=['cluster', 'sample'],
+                    help='Choose GCN partition method',
+                    default=None)
 parser.add_argument('-batchsize', type=int, default=64,
                     help='Training batch size')
 parser.add_argument('-epochs', type=int, default=1000,
@@ -71,6 +74,7 @@ loss_criterion = {'mse': nn.MSELoss(), 'mae': nn.L1Loss()}\
     .get(args.loss_criterion)
 gcn_type = args.gcn_type
 gcn_package = args.gcn_package
+gcn_partition = args.gcn_partition
 batch_size = args.batchsize
 epochs = args.epochs
 num_timesteps_input = args.num_timesteps_input
@@ -90,7 +94,8 @@ class WrapperNet(pl.LightningModule):
             hparams.num_timesteps_input,
             hparams.num_timesteps_output,
             hparams.gcn_type,
-            hparams.gcn_package
+            hparams.gcn_package,
+            hparams.gcn_partition
         )
 
     def init_graph(self, A, edge_index, edge_weight):
@@ -180,6 +185,7 @@ if __name__ == '__main__':
     print("dataset:", args.dataset)
     print("gcn type:", args.gcn_type)
     print("gcn package:", args.gcn_package)
+    print("gcn partition:", args.gcn_partition)
     torch.manual_seed(7)
 
     if args.dataset == "metr":
@@ -215,7 +221,8 @@ if __name__ == '__main__':
         'num_timesteps_input': num_timesteps_input,
         'num_timesteps_output': num_timesteps_output,
         'gcn_type': gcn_type,
-        'gcn_package': gcn_package
+        'gcn_package': gcn_package,
+        'gcn_partition': gcn_partition
     })
 
     net = WrapperNet(hparams)

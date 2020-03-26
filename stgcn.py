@@ -48,7 +48,7 @@ class STGCNBlock(nn.Module):
     """
 
     def __init__(self, in_channels, spatial_channels, out_channels,
-                num_nodes, gcn_type, gcn_package):
+                num_nodes, gcn_type, gcn_package, gcn_partition):
         """
         :param in_channels: Number of input features at each node in each time
         step.
@@ -64,7 +64,8 @@ class STGCNBlock(nn.Module):
         self.gcn = GCNUnit(in_channels=out_channels,
                             out_channels=spatial_channels,
                             gcn_type=gcn_type,
-                            gcn_package=gcn_package)
+                            gcn_package=gcn_package,
+                            gcn_partition=gcn_partition)
         self.temporal2 = TimeBlock(in_channels=spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
@@ -97,7 +98,8 @@ class STGCN(nn.Module):
     """
 
     def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='cheb', gcn_package='pyg'):
+                 num_timesteps_output, gcn_type='cheb', gcn_package='pyg',
+                 gcn_partition=None):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -109,10 +111,12 @@ class STGCN(nn.Module):
         super(STGCN, self).__init__()
         self.block1 = STGCNBlock(in_channels=num_features, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
-                                 gcn_type=gcn_type, gcn_package=gcn_package)
+                                 gcn_type=gcn_type, gcn_package=gcn_package,
+                                 gcn_partition=gcn_partition)
         self.block2 = STGCNBlock(in_channels=64, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
-                                 gcn_type=gcn_type, gcn_package=gcn_package)
+                                 gcn_type=gcn_type, gcn_package=gcn_package,
+                                 gcn_partition=gcn_partition)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
         self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
                                num_timesteps_output)

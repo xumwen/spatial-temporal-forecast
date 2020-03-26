@@ -6,16 +6,18 @@ from gcn import GCNUnit
 
 class GCNBlock(nn.Module):
     def __init__(self, in_channels, spatial_channels, num_nodes, 
-                gcn_type, gcn_package):
+                gcn_type, gcn_package, gcn_partition):
         super(GCNBlock, self).__init__()
         self.gcn1 = GCNUnit(in_channels=in_channels,
                             out_channels=spatial_channels,
                             gcn_type=gcn_type,
-                            gcn_package=gcn_package)
+                            gcn_package=gcn_package,
+                            gcn_partition=gcn_partition)
         self.gcn2 = GCNUnit(in_channels=spatial_channels,
                             out_channels=spatial_channels,
                             gcn_type=gcn_type,
-                            gcn_package=gcn_package)
+                            gcn_package=gcn_package,
+                            gcn_partition=gcn_partition)
         
     def forward(self, X, A, edge_index, edge_weight):
         """
@@ -126,7 +128,7 @@ class GRUBlock(nn.Module):
 class TGCN(nn.Module):
     def __init__(self, num_nodes, num_features, num_timesteps_input,
                  num_timesteps_output, gcn_type='normal', 
-                 gcn_package='pyg', hidden_size=64):
+                 gcn_package='pyg', gcn_partition=None, hidden_size=64):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -140,7 +142,8 @@ class TGCN(nn.Module):
                             spatial_channels=hidden_size,
                             num_nodes=num_nodes, 
                             gcn_type=gcn_type,
-                            gcn_package=gcn_package)
+                            gcn_package=gcn_package,
+                            gcn_partition=gcn_partition)
         self.gru = GRUBlock(input_size=hidden_size, hidden_size=hidden_size,
                                 input_seq_len = num_timesteps_input,
                                 output_seq_len=num_timesteps_output)

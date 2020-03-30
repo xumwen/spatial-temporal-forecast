@@ -191,7 +191,7 @@ class PyGConv(nn.Module):
             # and constructs sampled subgraphs (use cpu for no CUDA version)
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, num_nodes=sz[1]).to('cpu')
-            loader = NeighborSampler(graph_data, size=[25, 10], num_hops=2, batch_size=100,
+            loader = NeighborSampler(graph_data, size=[10, 5], num_hops=2, batch_size=100,
                          shuffle=True, add_self_loops=False)
 
             for data_flow in loader():

@@ -102,8 +102,8 @@ class WrapperNet(pl.LightningModule):
             hparams.num_nodes, hparams.num_nodes).float())
         self.register_buffer('edge_index', torch.LongTensor(
             2, hparams.num_edges))
-        self.register_buffer('edge_weight', torch.LongTensor(
-            hparams.num_edges))
+        self.register_buffer('edge_weight', torch.Tensor(
+            hparams.num_edges).float())
 
     def init_graph(self, A, edge_index, edge_weight):
         self.A.copy_(A)

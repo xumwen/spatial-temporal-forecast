@@ -143,7 +143,7 @@ class PyGConv(nn.Module):
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb']:
+            if gcn_type in ['normal', 'cheb', 'graph', 'sage']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':

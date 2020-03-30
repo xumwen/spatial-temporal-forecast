@@ -143,11 +143,13 @@ class PyGConv(nn.Module):
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph']:
+            if gcn_type in ['normal', 'cheb']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
                 self.kwargs['K'] = 3
+            if gcn_type == 'sage':
+                self.kwargs['concat'] = True
             
             GCNCell = {'normal':PyG.GCNConv, 
                         'cheb':PyG.ChebConv,

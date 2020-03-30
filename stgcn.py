@@ -97,9 +97,10 @@ class STGCN(nn.Module):
     num_features).
     """
 
-    def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='cheb', gcn_package='pyg',
-                 gcn_partition=None):
+    def __init__(self, num_nodes, num_edges, num_features, 
+                num_timesteps_input, num_timesteps_output, 
+                gcn_type='cheb', gcn_package='pyg',
+                gcn_partition=None, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.

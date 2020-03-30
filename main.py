@@ -90,6 +90,7 @@ class WrapperNet(pl.LightningModule):
         self.hparams = hparams
         self.net = model(
             hparams.num_nodes,
+            hparams.num_edges,
             hparams.num_features,
             hparams.num_timesteps_input,
             hparams.num_timesteps_output,
@@ -97,11 +98,17 @@ class WrapperNet(pl.LightningModule):
             hparams.gcn_package,
             hparams.gcn_partition
         )
+        self.register_buffer('A', torch.Tensor(
+            hparams.num_nodes, hparams.num_nodes).float())
+        self.register_buffer('edge_index', torch.LongTensor(
+            2, hparams.num_edges))
+        self.register_buffer('edge_weight', torch.LongTensor(
+            hparams.num_edges))
 
     def init_graph(self, A, edge_index, edge_weight):
-        self.register_buffer('A', A)
-        self.register_buffer('edge_index', edge_index)
-        self.register_buffer('edge_weight', edge_weight)
+        self.A.copy_(A)
+        self.edge_index.copy_(edge_index)
+        self.edge_weight.copy_(edge_weight)
 
     def init_data(self, training_input, training_target, val_input, val_target, test_input, test_target):
         print('preparing data...')
@@ -217,6 +224,7 @@ if __name__ == '__main__':
 
     hparams = Namespace(**{
         'num_nodes': A.shape[0],
+        'num_edges': edge_weight.shape[0],
         'num_features': training_input.shape[3],
         'num_timesteps_input': num_timesteps_input,
         'num_timesteps_output': num_timesteps_output,

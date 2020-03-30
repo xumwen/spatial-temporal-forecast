@@ -126,9 +126,10 @@ class GRUBlock(nn.Module):
         return output
 
 class TGCN(nn.Module):
-    def __init__(self, num_nodes, num_features, num_timesteps_input,
-                 num_timesteps_output, gcn_type='normal', 
-                 gcn_package='pyg', gcn_partition=None, hidden_size=64):
+    def __init__(self, num_nodes, num_edges, num_features,
+                 num_timesteps_input, num_timesteps_output, 
+                 gcn_type='normal', gcn_package='pyg', 
+                 gcn_partition=None, hidden_size=64, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.

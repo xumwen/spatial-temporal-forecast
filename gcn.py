@@ -6,9 +6,12 @@ import torch.nn.functional as F
 import torch_geometric.nn as PyG
 from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, ClusterData, ClusterLoader
 
+
 class GCNConv(nn.Module):
     """
-    Neural network block that applies a graph convolution to a batch of nodes.
+    The graph convolutional operator from the `"Semi-supervised
+    Classification with Graph Convolutional Networks"
+    <https://arxiv.org/abs/1609.02907>`_ paper
     """
     def __init__(self, in_channels, out_channels):
         """
@@ -47,6 +50,7 @@ class GCNConv(nn.Module):
         out = torch.matmul(t, self.weight)
         
         return out
+
 
 class ChebConv(nn.Module):
     """
@@ -106,6 +110,67 @@ class ChebConv(nn.Module):
             Tx_2 = 2 * torch.einsum("ij,jkl->kil", [L_hat, Tx_1.permute(1, 0, 2)]) - Tx_0
             out = out + torch.matmul(Tx_2, self.weight[k])
             Tx_0, Tx_1 = Tx_1, Tx_2
+
+        return out
+
+
+class SAGEConv(nn.Module):
+    """
+    The GraphSAGE operator from the `"Inductive Representation Learning on
+    Large Graphs" <https://arxiv.org/abs/1706.02216>`_ paper
+    """
+    def __init__(self, in_channels, out_channels, 
+                concat=True, normalize=False, bias=True):
+        """
+        :param in_channels: Number of input features at each node.
+        :param out_channels: Desired number of output channels at each node.
+        :param concat: Choose to concatenate current node features with aggregated ones.
+        :param normalize: Out features will be l2-normalization.
+        :param bias: Layer will learn an additive bias.
+        """
+        super(SAGEConv, self).__init__()
+        self.in_channels = in_channels if not concat else 2 * in_channels
+        self.out_channels = out_channels
+        self.concat = concat
+        self.normalize = normalize
+
+        self.weight = nn.Parameter(torch.Tensor(self.in_channels, out_channels))
+        if bias:
+            self.bias = nn.Parameter(torch.Tensor(out_channels))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / math.sqrt(self.weight.shape[1])
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            stdv = 1. / math.sqrt(self.bias.shape[0])
+            self.bias.data.uniform_(-stdv, stdv)
+    
+    def forward(self, X, A, add_self_loop=False):
+        """
+        :param X: Input data of shape (batch_size, num_nodes, in_channels)
+        :return: Output data of shape (batch_size, num_nodes, out_channels)
+        """
+        sz = X.shape
+        if not self.concat and add_self_loop:
+            A = A.clone()
+            idx = torch.arange(sz[1], device=X.device)
+            A[:, idx, idx] = 1
+        
+        out = torch.matmul(A, X)
+        out = out / A.sum(dim=-1, keepdim=True).clamp(min=1)
+
+        if self.concat:
+            out = torch.cat([X, out], dim=-1)
+        out = torch.matmul(out, self.weight)
+
+        if self.bias is not None:
+            out = out + self.bias
+
+        if self.normalize:
+            out = F.normalize(out, p=2, dim=-1)
 
         return out
 
@@ -220,6 +285,7 @@ class PyGConv(nn.Module):
         
         return out
 
+
 class GCNUnit(nn.Module):
     """
     Choose GCNUnit with package and type.
@@ -240,8 +306,9 @@ class GCNUnit(nn.Module):
                                 gcn_type=gcn_type,
                                 gcn_partition=gcn_partition)
         else:
+            assert gcn_type in ['normal', 'cheb', 'sage']
             self.adj_type = 'dense'
-            GCNCell = {'normal':GCNConv, 'cheb':ChebConv}\
+            GCNCell = {'normal':GCNConv, 'cheb':ChebConv, 'sage':SAGEConv}\
                 .get(gcn_type)
             self.gcn = GCNCell(in_channels=in_channels,
                                 out_channels=out_channels)

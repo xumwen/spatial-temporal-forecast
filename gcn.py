@@ -148,16 +148,18 @@ class SAGEConv(nn.Module):
             stdv = 1. / math.sqrt(self.bias.shape[0])
             self.bias.data.uniform_(-stdv, stdv)
     
-    def forward(self, X, A, add_self_loop=False):
+    def forward(self, X, A, add_self_loop=True):
         """
         :param X: Input data of shape (batch_size, num_nodes, in_channels)
+        :param A: Input adjacent matrix.
+        :param add_self_loop: Add self-loop but if concat is True this will be ignored.
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         sz = X.shape
         if not self.concat and add_self_loop:
             A = A.clone()
             idx = torch.arange(sz[1], device=X.device)
-            A[:, idx, idx] = 1
+            A[idx, idx] = 1
         
         out = torch.matmul(A, X)
         out = out / A.sum(dim=-1, keepdim=True).clamp(min=1)

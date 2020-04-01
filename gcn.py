@@ -202,7 +202,7 @@ class GATConv(nn.Module):
         nn.init.xavier_uniform_(self.weight.data, gain=1.414)
         nn.init.xavier_uniform_(self.a.data, gain=1.414)
     
-    def forward(self, X, A, add_self_loop=True):
+    def forward(self, X, A, add_self_loop=True, adj_available=True):
         """
         :param X: Input data of shape (batch_size, num_nodes, in_channels)
         :param A: Input adjacent matrix.
@@ -230,6 +230,9 @@ class GATConv(nn.Module):
         attention = F.dropout(attention, self.dropout, training=self.training)
 
         out = torch.matmul(attention, X)
+
+        if adj_available:
+            out = torch.matmul(A, X)
 
         return out
 

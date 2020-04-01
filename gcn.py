@@ -232,7 +232,7 @@ class GATConv(nn.Module):
         out = torch.matmul(attention, X)
 
         if adj_available:
-            out = torch.matmul(A, X)
+            out = torch.matmul(A, out)
 
         return out
 

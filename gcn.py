@@ -134,7 +134,7 @@ class SAGEConv(nn.Module):
         self.concat = concat
         self.normalize = normalize
 
-        self.weight = nn.Parameter(torch.Tensor(self.in_channels, out_channels))
+        self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
@@ -173,6 +173,66 @@ class SAGEConv(nn.Module):
 
         if self.normalize:
             out = F.normalize(out, p=2, dim=-1)
+
+        return out
+
+
+class GATConv(nn.Module):
+    """
+    The graph attentional operator from the `"Graph Attention Networks"
+    <https://arxiv.org/abs/1710.10903>`_ paper
+    """
+    def __init__(self, in_channels, out_channels, dropout=0):
+        """
+        :param in_channels: Number of input features at each node.
+        :param out_channels: Desired number of output channels at each node.
+        :param heads: Number of multi-head-attentions.
+        :param concat: If set to :obj:`False`, the multi-head
+            attentions are averaged instead of concatenated.
+        :param dropout: Dropout probability of the normalized attention coefficients.
+        """
+        super(GATConv, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.dropout = dropout
+
+        self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.a = nn.Parameter(torch.zeros(size=(2 * out_channels, 1)))
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.weight.data, gain=1.414)
+        nn.init.xavier_uniform_(self.a.data, gain=1.414)
+    
+    def forward(self, X, A, add_self_loop=True):
+        """
+        :param X: Input data of shape (batch_size, num_nodes, in_channels)
+        :param A: Input adjacent matrix.
+        :param add_self_loop: Add self-loop but if concat is True this will be ignored.
+        :return: Output data of shape (batch_size, num_nodes, out_channels)
+        """
+        B, N, _ = X.shape
+        A = A.clone()
+        if add_self_loop:
+            idx = torch.arange(N, device=X.device)
+            A[idx, idx] = 1
+        
+        # map X to shape [B, N, out_channels]
+        X = torch.matmul(X, self.weight)
+
+        # calculate attention matrix of shape [B, N, N]
+        att_left = X.repeat(1, 1, N).view(B, N*N, -1)
+        att_right = X.repeat(1, N, 1)
+        att_input = torch.cat([att_left, att_right], dim=-1)
+        att_score_ij = F.leaky_relu(torch.matmul(att_input, self.a).squeeze(-1)).view(B, N, N)
+
+        zero_vec = -9e15*torch.ones_like(att_score_ij)
+        attention = torch.where(A > 0, att_score_ij, zero_vec)
+        attention = F.softmax(attention, dim=2)
+        attention = F.dropout(attention, self.dropout, training=self.training)
+
+        out = torch.matmul(attention, X)
 
         return out
 
@@ -308,10 +368,12 @@ class GCNUnit(nn.Module):
                                 gcn_type=gcn_type,
                                 gcn_partition=gcn_partition)
         else:
-            assert gcn_type in ['normal', 'cheb', 'sage']
+            assert gcn_type in ['normal', 'cheb', 'sage', 'gat']
             self.adj_type = 'dense'
-            GCNCell = {'normal':GCNConv, 'cheb':ChebConv, 'sage':SAGEConv}\
-                .get(gcn_type)
+            GCNCell = {'normal':GCNConv, 
+                        'cheb':ChebConv, 
+                        'sage':SAGEConv, 
+                        'gat':GATConv}.get(gcn_type)
             self.gcn = GCNCell(in_channels=in_channels,
                                 out_channels=out_channels)
 

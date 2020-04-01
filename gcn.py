@@ -182,13 +182,10 @@ class GATConv(nn.Module):
     The graph attentional operator from the `"Graph Attention Networks"
     <https://arxiv.org/abs/1710.10903>`_ paper
     """
-    def __init__(self, in_channels, out_channels, dropout=0):
+    def __init__(self, in_channels, out_channels, dropout=0.5):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.
-        :param heads: Number of multi-head-attentions.
-        :param concat: If set to :obj:`False`, the multi-head
-            attentions are averaged instead of concatenated.
         :param dropout: Dropout probability of the normalized attention coefficients.
         """
         super(GATConv, self).__init__()
@@ -229,7 +226,7 @@ class GATConv(nn.Module):
 
         zero_vec = -9e15*torch.ones_like(att_score_ij)
         attention = torch.where(A > 0, att_score_ij, zero_vec)
-        attention = F.softmax(attention, dim=2)
+        attention = F.softmax(attention, dim=-1)
         attention = F.dropout(attention, self.dropout, training=self.training)
 
         out = torch.matmul(attention, X)

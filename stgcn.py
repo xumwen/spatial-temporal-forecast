@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from gcn import GCNUnit
-
+from my_conv import Conv2dSame as Conv2d
 
 class TimeBlock(nn.Module):
     """
@@ -11,7 +11,7 @@ class TimeBlock(nn.Module):
     a graph in isolation.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size=3):
+    def __init__(self, in_channels, out_channels, kernel_size=[2,3,4,5]):
         """
         :param in_channels: Number of input features at each node in each time
         step.
@@ -20,9 +20,9 @@ class TimeBlock(nn.Module):
         :param kernel_size: Size of the 1D temporal kernel.
         """
         super(TimeBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, (1, kernel_size))
-        self.conv2 = nn.Conv2d(in_channels, out_channels, (1, kernel_size))
-        self.conv3 = nn.Conv2d(in_channels, out_channels, (1, kernel_size))
+        self.conv_list = nn.ModuleList()
+        for _kernel_size in kernel_size:
+            self.conv_list.append(Conv2d(in_channels, out_channels, (1, _kernel_size)))
 
     def forward(self, X):
         """
@@ -33,8 +33,12 @@ class TimeBlock(nn.Module):
         """
         # Convert into NCHW format for pytorch to perform convolutions.
         X = X.permute(0, 3, 1, 2)
-        temp = self.conv1(X) + torch.sigmoid(self.conv2(X))
-        out = F.relu(temp + self.conv3(X))
+        for i in range(len(self.conv_list)):
+            if i == 0:
+                out = self.conv_list[i](X)
+            else:
+                out += self.conv_list[i](X)
+        out = F.relu(out)
         # Convert back from NCHW to NHWC
         out = out.permute(0, 2, 3, 1)
         return out
@@ -119,7 +123,7 @@ class STGCN(nn.Module):
                                  gcn_type=gcn_type, gcn_package=gcn_package,
                                  gcn_partition=gcn_partition)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
-        self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
+        self.fully = nn.Linear(num_timesteps_input * 64,
                                num_timesteps_output)
 
     def forward(self, X, A=None, edge_index=None, edge_weight=None):

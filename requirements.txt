@@ -1,0 +1,5 @@
+torch-sparse==0.6.1+cu101 -f https://pytorch-geometric.com/whl/torch-1.4.0.html
+torch-scatter==latest+${CUDA} -f https://pytorch-geometric.com/whl/torch-1.4.0.html
+test-tube
+torch-geometric
+pytorch-lightning

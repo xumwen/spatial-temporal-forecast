@@ -156,8 +156,8 @@ class SAGEConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         sz = X.shape
+        A = A.clone()
         if not self.concat and add_self_loop:
-            A = A.clone()
             idx = torch.arange(sz[1], device=X.device)
             A[idx, idx] = 1
         

@@ -156,13 +156,13 @@ class SAGEConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         sz = X.shape
-        A = A.clone()
+        adj = A.clone()
         if not self.concat and add_self_loop:
             idx = torch.arange(sz[1], device=X.device)
-            A[idx, idx] = 1
+            adj[idx, idx] = 1
         
-        out = torch.matmul(A, X)
-        out = out / A.sum(dim=-1, keepdim=True).clamp(min=1)
+        out = torch.matmul(adj, X)
+        out = out / adj.sum(dim=-1, keepdim=True).clamp(min=1)
 
         if self.concat:
             out = torch.cat([X, out], dim=-1)
@@ -211,10 +211,10 @@ class GATConv(nn.Module):
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         B, N, _ = X.shape
-        A = A.clone()
+        adj = A.clone()
         if add_self_loop:
             idx = torch.arange(N, device=X.device)
-            A[idx, idx] = 1
+            adj[idx, idx] = 1
         
         # map X to shape [B, N, out_channels]
         out = torch.matmul(X, self.weight)
@@ -226,14 +226,14 @@ class GATConv(nn.Module):
         att_vec = F.leaky_relu(torch.matmul(att_input, self.a).squeeze(-1)).view(B, N, N)
 
         zero_vec = -9e15*torch.ones_like(att_vec)
-        attention = torch.where(A > 0, att_vec, zero_vec)
+        attention = torch.where(adj > 0, att_vec, zero_vec)
         attention = F.softmax(attention, dim=-1)
         attention = F.dropout(attention, self.dropout, training=self.training)
 
         out = torch.matmul(attention, out)
 
         if adj_available:
-            out = torch.matmul(A, out)
+            out = torch.matmul(adj, out)
 
         return out
 

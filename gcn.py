@@ -134,7 +134,7 @@ class SAGEConv(nn.Module):
         self.concat = concat
         self.normalize = normalize
 
-        self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.weight = nn.Parameter(torch.Tensor(self.in_channels, out_channels))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(out_channels))
         else:
@@ -182,7 +182,7 @@ class GATConv(nn.Module):
     The graph attentional operator from the `"Graph Attention Networks"
     <https://arxiv.org/abs/1710.10903>`_ paper
     """
-    def __init__(self, in_channels, out_channels, dropout=0.5):
+    def __init__(self, in_channels, out_channels, dropout=0):
         """
         :param in_channels: Number of input features at each node.
         :param out_channels: Desired number of output channels at each node.

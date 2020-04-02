@@ -194,7 +194,7 @@ class GATConv(nn.Module):
         self.dropout = dropout
 
         self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
-        self.a = nn.Parameter(torch.zeros(size=(2 * out_channels, 1)))
+        self.a = nn.Parameter(torch.Tensor(2 * out_channels, 1))
 
         self.reset_parameters()
 
@@ -217,11 +217,11 @@ class GATConv(nn.Module):
             A[idx, idx] = 1
         
         # map X to shape [B, N, out_channels]
-        X = torch.matmul(X, self.weight)
+        out = torch.matmul(X, self.weight)
 
         # calculate attention matrix of shape [B, N, N]
-        att_left = X.repeat(1, 1, N).view(B, N*N, -1)
-        att_right = X.repeat(1, N, 1)
+        att_left = out.repeat(1, 1, N).view(B, N*N, -1)
+        att_right = out.repeat(1, N, 1)
         att_input = torch.cat([att_left, att_right], dim=-1)
         att_vec = F.leaky_relu(torch.matmul(att_input, self.a).squeeze(-1)).view(B, N, N)
 
@@ -230,7 +230,7 @@ class GATConv(nn.Module):
         attention = F.softmax(attention, dim=-1)
         attention = F.dropout(attention, self.dropout, training=self.training)
 
-        out = torch.matmul(attention, X)
+        out = torch.matmul(attention, out)
 
         if adj_available:
             out = torch.matmul(A, out)
@@ -277,7 +277,7 @@ class PyGConv(nn.Module):
             if gcn_type == 'cheb':
                 self.kwargs['K'] = 3
             if gcn_type == 'sage':
-                self.kwargs['concat'] = True
+                self.kwargs['concat'] = False
             
             GCNCell = {'normal':PyG.GCNConv, 
                         'cheb':PyG.ChebConv,
@@ -301,7 +301,8 @@ class PyGConv(nn.Module):
         :param edge_weight: Edge feature matrix with shape (num_edges, num_edge_features)
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
-        sz = X.shape
+        if torch.is_tensor(X):
+            sz = X.shape
         if self.gcn_partition == 'cluster':
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
@@ -324,10 +325,14 @@ class PyGConv(nn.Module):
 
             for data_flow in loader():
                 block1 = data_flow[0]
-                t = self.gcn1(X, edge_index[:, block1.e_id], edge_weight[block1.e_id])
+                block1_in = X[:, block1.n_id]
+                block1_out = self.gcn1((block1_in, None), block1.edge_index.to(X.device), edge_weight[block1.e_id])
+
                 block2 = data_flow[1]
-                part_out = self.gcn2(t, edge_index[:, block2.e_id], edge_weight[block2.e_id])
-                out[:, data_flow.n_id] = part_out[:, data_flow.n_id]
+                block2_in = X[:, block2.n_id] + block1_out[:, :len(block2.n_id)]
+                block2_out = self.gcn2((block2_in, None), block2.edge_index.to(X.device), edge_weight[block2.e_id])
+
+                out[:, data_flow.n_id] = X[:, data_flow.n_id] + block2_out[:, :len(data_flow.n_id)]
 
         elif self.batch_training:
             if self.adj_available:
@@ -336,7 +341,7 @@ class PyGConv(nn.Module):
                 out = self.gcn(X, edge_index)
 
         else:
-            # Currently, conv in [SAGEConv, GATConv] cannot use argument node_dim for batch training
+            # Currently, conv in [GATConv] cannot use argument node_dim for batch training
             # This is a temp solution but it's very very very slow!
             # Costing about 6 times more than batch_training
             batch = self.get_batch(X)

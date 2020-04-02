@@ -202,11 +202,12 @@ class GATConv(nn.Module):
         nn.init.xavier_uniform_(self.weight.data, gain=1.414)
         nn.init.xavier_uniform_(self.a.data, gain=1.414)
     
-    def forward(self, X, A, add_self_loop=True, adj_available=True):
+    def forward(self, X, A, add_self_loop=True, adj_available=False):
         """
         :param X: Input data of shape (batch_size, num_nodes, in_channels)
         :param A: Input adjacent matrix.
         :param add_self_loop: Add self-loop but if concat is True this will be ignored.
+        :param adj_available: Multiply out with adjacent matrix if sets True.
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         B, N, _ = X.shape
@@ -222,10 +223,10 @@ class GATConv(nn.Module):
         att_left = X.repeat(1, 1, N).view(B, N*N, -1)
         att_right = X.repeat(1, N, 1)
         att_input = torch.cat([att_left, att_right], dim=-1)
-        att_score_ij = F.leaky_relu(torch.matmul(att_input, self.a).squeeze(-1)).view(B, N, N)
+        att_vec = F.leaky_relu(torch.matmul(att_input, self.a).squeeze(-1)).view(B, N, N)
 
-        zero_vec = -9e15*torch.ones_like(att_score_ij)
-        attention = torch.where(A > 0, att_score_ij, zero_vec)
+        zero_vec = -9e15*torch.ones_like(att_vec)
+        attention = torch.where(A > 0, att_vec, zero_vec)
         attention = F.softmax(attention, dim=-1)
         attention = F.dropout(attention, self.dropout, training=self.training)
 

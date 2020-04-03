@@ -4,7 +4,10 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as PyG
+from torch_geometric.utils import degree
 from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, ClusterData, ClusterLoader
+from torch_geometric.data import GraphSAINTSampler, GraphSAINTNodeSampler, GraphSAINTEdgeSampler, GraphSAINTRandomWalkSampler
+
 
 
 class GCNConv(nn.Module):
@@ -233,7 +236,7 @@ class PyGConv(nn.Module):
 
         return Batch.from_data_list(data_list)
 
-    def forward(self, X, edge_index, edge_weight):
+    def forward(self, X, edge_index, edge_weight, mode):
         """
         :param X: Input data of shape (batch_size, num_nodes, in_channels)
         :param edge_index: Graph connectivity in COO format with shape(2, num_edges)
@@ -245,7 +248,7 @@ class PyGConv(nn.Module):
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
                                 train_mask=torch.arange(0, sz[1]), num_nodes=sz[1])
-            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data')
+            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir=None)
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
             for subgraph in loader:
@@ -268,6 +271,45 @@ class PyGConv(nn.Module):
                 part_out = self.gcn2(t, edge_index[:, block2.e_id], edge_weight[block2.e_id])
                 out[:, data_flow.n_id] = part_out[:, data_flow.n_id]
 
+        elif 'saint' in self.gcn_partition:
+            if mode in ['valid','test']:
+                # use cluser sampling for infer ...
+                out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+                graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
+                                    train_mask=torch.arange(0, sz[1]), num_nodes=sz[1])
+                cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data', log=False)
+                loader = ClusterLoader(cluster_data, batch_size=5, shuffle=False, num_workers=0)
+
+                for subgraph in loader:
+                    out[:, subgraph.train_mask] = self.gcn(X[:, subgraph.train_mask], 
+                                                    subgraph.edge_index.to(X.device), 
+                                                    subgraph.edge_attr.to(X.device))
+            else:               
+                assert self.gcn_partition in ['saintnode','saintedge','saintrandom'], 'InCorrect GraphGIANTSampler'
+                Sampler = {'saintnode':GraphSAINTNodeSampler, 
+                            'saintedge':GraphSAINTEdgeSampler,
+                            'saintrandom':GraphSAINTRandomWalkSampler}\
+                            .get(self.gcn_partition)
+                out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+                sample_times = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
+                row, col = edge_index
+                edge_attr = 1. / degree(col, sz[1])[col]     # Norm by in-degree.
+                graph_data = Data(edge_index=edge_index, num_nodes=sz[1], 
+                                    train_mask=torch.arange(0, sz[1]), edge_attr=edge_attr).to('cpu')
+                if self.gcn_partition == 'saintrandom':
+                    loader = Sampler(graph_data, batch_size=32, walk_length=2, num_steps=1,
+                                sample_coverage=2000, save_dir='./data', num_workers=0)
+                else:
+                    loader = Sampler(graph_data, batch_size=32, num_steps=1,
+                                sample_coverage=2000, save_dir='./data', num_workers=0)    
+
+                for subgrah in loader:
+                    sample_times[:, subgrah.train_mask] += 1.0
+                    out[:, subgrah.train_mask] += self.gcn(X[:, subgrah.train_mask],
+                                                    subgrah.edge_index.to(X.device),
+                                                    subgrah.edge_attr.to(X.device))
+                out = out / sample_times         
+                 
         elif self.batch_training:
             if self.adj_available:
                 out = self.gcn(X, edge_index, edge_weight)
@@ -299,6 +341,7 @@ class GCNUnit(nn.Module):
         :param gcn_type: Choose GCN type.
         :param gcn_package: Choose GCN package in ['pyg', 'ours'].
         :param gcn_partition: Choose GCN partition method in ['cluster', 'sample']
+        :param mode: train, valid, test for pyG in GraphGIANTSampler
         """
         super(GCNUnit, self).__init__()
         self.adj_type = 'sparse'
@@ -315,14 +358,14 @@ class GCNUnit(nn.Module):
             self.gcn = GCNCell(in_channels=in_channels,
                                 out_channels=out_channels)
 
-    def forward(self, X, A=None, edge_index=None, edge_weight=None):
+    def forward(self, X, A=None, edge_index=None, edge_weight=None, mode='train'):
         """
         :param X: Input data of shape (batch_size, num_nodes, in_channels)
         :param **kwargs: Additional arguments(dense or sparse adj matrix).
         :return: Output data of shape (batch_size, num_nodes, out_channels)
         """
         if self.adj_type == 'sparse':
-            out = self.gcn(X, edge_index=edge_index, edge_weight=edge_weight)
+            out = self.gcn(X, edge_index=edge_index, edge_weight=edge_weight, mode=mode)
         else:
             out = self.gcn(X, A=A)
         

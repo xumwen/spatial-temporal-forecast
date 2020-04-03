@@ -42,7 +42,8 @@ parser.add_argument('-t', "--gcn-type",
 parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
                     help='Choose GCN implemented package',
                     default='ours')
-parser.add_argument('-part', "--gcn-partition", choices=['cluster', 'sample'],
+parser.add_argument('-part', "--gcn-partition", choices=['cluster', 'sample',\
+                             'saintnode','saintedge','saintrandom'],
                     help='Choose GCN partition method',
                     default=None)
 parser.add_argument('-batchsize', type=int, default=64,
@@ -142,14 +143,15 @@ class WrapperNet(pl.LightningModule):
     def test_dataloader(self):
         return self.make_dataloader(self.test_input, self.test_target, shuffle=False, backend='dp')
 
-    def forward(self, X):
+    def forward(self, X, mode):
         return self.net(X, A=self.A, 
                         edge_index=self.edge_index, 
-                        edge_weight=self.edge_weight)
+                        edge_weight=self.edge_weight, 
+                        mode=mode)
 
     def training_step(self, batch, batch_idx):
         X, y = batch
-        y_hat = self(X)
+        y_hat = self(X, mode='train')
         assert(y.size() == y_hat.size())
         loss = loss_criterion(y_hat, y)
 
@@ -157,7 +159,7 @@ class WrapperNet(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx, dataloader_idx):
         X, y = batch
-        y_hat = self(X)
+        y_hat = self(X, mode='valid')
         return {'loss': loss_criterion(y_hat, y)}
 
     def validation_end(self, outputs):
@@ -171,7 +173,7 @@ class WrapperNet(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         X, y = batch
-        y_hat = self(X)
+        y_hat = self(X, mode='test')
         return {'loss': loss_criterion(y_hat, y)}
 
     def test_end(self, outputs):

@@ -47,6 +47,7 @@ python main.py -m stgcn -d nyc-bike -t cheb -p pyg
 ```
 # Single-GPU Training Example: Use GPU:1
 CUDA_VISIBLE_DEVICES=1 python main_task.py -m stgcn
+
 # Single-Machine Distributed Training Example: Use GPU:0 and GPU:3 with 2 Processes
 CUDA_VISIBLE_DEVICES=0,3 python -m torch.distributed.launch --nproc_per_node 2 main_task.py -m stgcn
 ```

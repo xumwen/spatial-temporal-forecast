@@ -4,7 +4,8 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_geometric.nn as PyG
-from egnn import SAGELA, EGNN
+from sparse_egnn import SAGELANet
+from egnn import EGNN
 from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, ClusterData, ClusterLoader
 
 
@@ -398,13 +399,16 @@ class GCNUnit(nn.Module):
                                 gcn_partition=gcn_partition)
         else:
             assert gcn_type in ['normal', 'cheb', 'sage', 'gat', 'egnn', 'sagela']
-            self.adj_type = 'dense'
+            if gcn_type in ['sagela']:
+                self.adj_type = 'sparse'
+            else:
+                self.adj_type = 'dense'
             GCNCell = {'normal':GCNConv, 
                         'cheb':ChebConv, 
                         'sage':SAGEConv, 
                         'gat':GATConv,
                         'egnn':EGNN,
-                        'sagela':SAGELA}.get(gcn_type)
+                        'sagela':SAGELANet}.get(gcn_type)
             self.gcn = GCNCell(in_channels=in_channels,
                                 out_channels=out_channels)
 

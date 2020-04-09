@@ -55,7 +55,7 @@ parser.add_argument('-num-timesteps-input', type=int, default=12,
                     help='Num of input timesteps')
 parser.add_argument('-num-timesteps-output', type=int, default=3,
                     help='Num of output timesteps for forecasting')
-parser.add_argument('-early-stop-rounds', type=int, default=30,
+parser.add_argument('-early-stop-rounds', type=int, default=10,
                     help='Earlystop rounds when validation loss does not decrease')
 
 args = parser.parse_args()

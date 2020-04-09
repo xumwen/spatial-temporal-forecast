@@ -36,7 +36,7 @@ class SAGELA(PyG.SAGEConv):
 
 
 class SAGELANet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, **kwargs):
         super(SAGELANet, self).__init__()
         self.sagela = SAGELA(in_channels, out_channels, edge_channels=1, node_dim=1)
     

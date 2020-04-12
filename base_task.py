@@ -35,7 +35,9 @@ CPT_DIR_NAME = 'Checkpoint'  # for checkpoints
 OUT_DIR_NAME = 'Output'  # for model outputs
 LOG_DIR_NAME = 'Tensorboard'  # for tensorboard summaries
 # runtime environment variables
-RUNTIME_LOG_DIR = 'RUNTIME_LOG_DIR'  # logging tensorboard info into a runtime directory
+RUNTIME_LOG_DIR = 'RUNTIME_LOG_DIR'  # logging tensorboard info into a runtime directory, and copy to exp dir at last
+RUNTIME_MODEL_DIR = 'RUNTIME_MODEL_DIR'  # dumping model checkpoints into a runtime directory, and copy to exp dir at last
+# TODO: impl logics for runtime model directory
 
 # Helper functions
 def dump_json_to(obj, fpath, indent=2, ensure_ascii=False, **kwargs):

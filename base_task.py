@@ -33,7 +33,9 @@ VAL_SCORE_KEY = 'val_score'  # for choosing the best checkpoint
 # directories to save checkpoints, model outputs, and tensorboard summaries
 CPT_DIR_NAME = 'Checkpoint'  # for checkpoints
 OUT_DIR_NAME = 'Output'  # for model outputs
-SUM_DIR_PREFIX = 'Tensorboard'  # for tensorboard
+LOG_DIR_NAME = 'Tensorboard'  # for tensorboard summaries
+# runtime environment variables
+RUNTIME_LOG_DIR = 'RUNTIME_LOG_DIR'  # logging tensorboard info into a runtime directory
 
 # Helper functions
 def dump_json_to(obj, fpath, indent=2, ensure_ascii=False, **kwargs):
@@ -172,6 +174,7 @@ class BasePytorchTask(ABC):
         self.val_dataloader = None
         self.test_dataloader = None
         self.summary_writer = None
+        self._log_dir_path = None  # the full directory path to log tensorboard summaries
         self._set_fitting_state()
 
         self.dump_config()
@@ -393,13 +396,28 @@ class BasePytorchTask(ABC):
     def build_summary_writer(self):
         # only master node can build summary writer
         if self.is_master_node:
-            cur_time = datetime.now().strftime('%b%d_%H-%M-%S')
-            dir_name = '{}-{}'.format(SUM_DIR_PREFIX, cur_time)
-            sum_dpath = os.path.join(self.config.exp_dir, dir_name)
-            self.summary_writer = SummaryWriter(sum_dpath)
-            return sum_dpath
+            # cur_time = datetime.now().strftime('%b%d_%H-%M-%S')
+            # dir_name = '{}-{}'.format(LOG_DIR_PREFIX, cur_time)
+            # sum_dpath = os.path.join(self.config.exp_dir, dir_name)
+            self._log_dir_path = os.path.join(self.config.exp_dir, LOG_DIR_NAME)
+            if RUNTIME_LOG_DIR in os.environ:
+                # write summaries into a runtime hot storage
+                self.summary_writer = SummaryWriter(os.environ[RUNTIME_LOG_DIR])
+            else:
+                self.summary_writer = SummaryWriter(self._log_dir_path)
+            return self.summary_writer.logdir
         else:
             return None
+
+    def close_summary_writer(self):
+        if self.is_master_node:
+            self.summary_writer.close()
+            if RUNTIME_LOG_DIR in os.environ:
+                # copy logged summaries from the runtime hot storage to experiment directory
+                runtime_log_dir = os.environ[RUNTIME_LOG_DIR]
+                for fn in os.listdir(runtime_log_dir):
+                    raw_fp = os.path.join(runtime_log_dir, fn)
+                    shutil.copy(raw_fp, self._log_dir_path)
 
     def dump(self, val_out=None, test_out=None, epoch_idx=None, is_best=False, dump_option=1):
         # only the master node can dump outputs
@@ -601,8 +619,10 @@ class BasePytorchTask(ABC):
                 return
             if self.in_distributed_mode:
                 dist.barrier()
-        # close the main progress bar
+
+        # processing at the end
         main_pbar.close()
+        self.close_summary_writer()
 
     def eval(self, model, dataloader, step_func, epoch_end_func, pbar_desc, epoch=None):
         # At present, we do not support distributed dataloader for evaluation,

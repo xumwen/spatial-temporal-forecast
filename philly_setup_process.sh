@@ -1,6 +1,6 @@
 #! /bin/bash
 
-# Setup conda and env for each process
+# Setup conda env for each process
 CONDA_HOME="/var/storage/shared/resrchvc/shunzhen/anaconda3"
 export CONDA_ENVS_PATH=$CONDA_HOME/envs
 export CONDA_ENVS_DIR=$CONDA_HOME/envs

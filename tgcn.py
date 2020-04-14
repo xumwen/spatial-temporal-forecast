@@ -129,7 +129,8 @@ class TGCN(nn.Module):
     def __init__(self, num_nodes, num_edges, num_features,
                  num_timesteps_input, num_timesteps_output, 
                  gcn_type='normal', gcn_package='pyg', 
-                 gcn_partition=None, hidden_size=64, **kwargs):
+                 gcn_partition=None, hidden_size=64, 
+                 spatial_channels=16, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -140,12 +141,12 @@ class TGCN(nn.Module):
         """
         super(TGCN, self).__init__()
         self.gcn = GCNBlock(in_channels=num_features, 
-                            spatial_channels=16,
+                            spatial_channels=spatial_channels,
                             num_nodes=num_nodes, 
                             gcn_type=gcn_type,
                             gcn_package=gcn_package,
                             gcn_partition=gcn_partition)
-        self.gru = GRUBlock(input_size=hidden_size, hidden_size=hidden_size,
+        self.gru = GRUBlock(input_size=spatial_channels, hidden_size=hidden_size,
                                 input_seq_len = num_timesteps_input,
                                 output_seq_len=num_timesteps_output)
 

@@ -140,7 +140,7 @@ class TGCN(nn.Module):
         """
         super(TGCN, self).__init__()
         self.gcn = GCNBlock(in_channels=num_features, 
-                            spatial_channels=hidden_size,
+                            spatial_channels=16,
                             num_nodes=num_nodes, 
                             gcn_type=gcn_type,
                             gcn_package=gcn_package,

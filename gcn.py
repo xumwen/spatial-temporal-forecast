@@ -8,7 +8,7 @@ from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, Clust
 
 import dense_gcn as ours
 from dense_egnn import EGNN, SAGELA
-from sparse_egnn import SAGELANet
+from sparse_egnn import SAGELANet, GatedGCNNet
 
 
 class PyGConv(nn.Module):
@@ -38,13 +38,13 @@ class PyGConv(nn.Module):
             self.gcn = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
         elif self.gcn_partition == 'sample':
             # Sampled edge are usually unsymmetric so only support spatial domain gcn
-            assert gcn_type in ['sage', 'graph', 'gat', 'sagela']
+            assert gcn_type in ['sage', 'graph', 'gat', 'sagela', 'gated']
             self.gcn1 = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
             self.gcn2 = PyGConv(out_channels, out_channels, gcn_type, gcn_partition=None)
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph', 'sage', 'sagela']:
+            if gcn_type in ['normal', 'cheb', 'graph', 'sage', 'sagela', 'gated']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -57,7 +57,8 @@ class PyGConv(nn.Module):
                         'sage':PyG.SAGEConv, 
                         'graph':PyG.GraphConv,
                         'gat':PyG.GATConv,
-                        'sagela':SAGELANet}\
+                        'sagela':SAGELANet,
+                        'gated':GatedGCNNet}\
                         .get(gcn_type)
             
             self.gcn = GCNCell(**self.kwargs)

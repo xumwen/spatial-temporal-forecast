@@ -37,11 +37,11 @@ parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'],
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
                     help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn-type", 
-                    choices=['normal', 'cheb', 'sage', 'graph', 'gat', 'egnn', 'sagela', 'gated'],
+                    choices=['normal', 'cheb', 'sage', 'graph', 'gat', 'egnn', 'sagela', 'gated', 'my'],
                     help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
                     help='Choose GCN implemented package',
-                    default='ours')
+                    default='pyg')
 parser.add_argument('-part', "--gcn-partition", choices=['cluster', 'sample'],
                     help='Choose GCN partition method',
                     default=None)

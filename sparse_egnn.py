@@ -129,7 +129,7 @@ class MyEGNNConv(MessagePassing):
         self.linear_att = nn.Linear(3 * out_channels, 1)
         self.linear_concat = nn.Linear(2 * out_channels, out_channels)
 
-        self.layer_norm = nn.LayerNorm(normalized_shape=out_channels)
+        # self.layer_norm = nn.LayerNorm(normalized_shape=out_channels)
         self.reset_parameters()
     
     def reset_parameters(self):
@@ -154,9 +154,8 @@ class MyEGNNConv(MessagePassing):
         # cal att of shape [B, E, 1]
         query = torch.matmul(x_j, self.query)
         key = torch.matmul(x_i, self.key)
-        edge_emb = edge_emb.repeat(x_j.shape[0], 1, 1)
 
-        att_feature = torch.cat([key, query, edge_emb], dim=-1)
+        att_feature = torch.cat([key, query, edge_emb.repeat(x_j.shape[0], 1, 1)], dim=-1)
         att = F.sigmoid(self.linear_att(att_feature))
         # gate of shape [1, E, C]
         gate = F.sigmoid(edge_emb)
@@ -168,7 +167,9 @@ class MyEGNNConv(MessagePassing):
             x = x[1]
 
         aggr_out = self.linear_concat(torch.cat([x, aggr_out], dim=-1))
-        aggr_out = self.layer_norm(aggr_out)
+        # aggr_out = self.layer_norm(aggr_out)
+        batch_norm = nn.BatchNorm1d(aggr_out.shape[1]).to(x.device)
+        aggr_out = batch_norm(aggr_out)
         
         return x + F.relu(aggr_out)
 

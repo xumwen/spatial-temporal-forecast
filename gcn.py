@@ -8,7 +8,7 @@ from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, Clust
 
 import dense_gcn as ours
 from dense_egnn import EGNN, SAGELA
-from sparse_egnn import SAGELANet, GatedGCNNet
+from sparse_egnn import SAGELANet, GatedGCNNet, MyEGNNNet
 
 
 class PyGConv(nn.Module):
@@ -38,13 +38,13 @@ class PyGConv(nn.Module):
             self.gcn = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
         elif self.gcn_partition == 'sample':
             # Sampled edge are usually unsymmetric so only support spatial domain gcn
-            assert gcn_type in ['sage', 'graph', 'gat', 'sagela', 'gated']
+            assert gcn_type not in ['cheb', 'normal']
             self.gcn1 = PyGConv(in_channels, out_channels, gcn_type, gcn_partition=None)
             self.gcn2 = PyGConv(out_channels, out_channels, gcn_type, gcn_partition=None)
         else:
             if gcn_type == 'gat':
                 self.adj_available = False
-            if gcn_type in ['normal', 'cheb', 'graph', 'sage', 'sagela', 'gated']:
+            if gcn_type not in ['gat']:
                 self.batch_training = True
                 self.kwargs['node_dim'] = 1
             if gcn_type == 'cheb':
@@ -58,7 +58,8 @@ class PyGConv(nn.Module):
                         'graph':PyG.GraphConv,
                         'gat':PyG.GATConv,
                         'sagela':SAGELANet,
-                        'gated':GatedGCNNet}\
+                        'gated':GatedGCNNet,
+                        'my':MyEGNNNet}\
                         .get(gcn_type)
             
             self.gcn = GCNCell(**self.kwargs)
@@ -82,7 +83,7 @@ class PyGConv(nn.Module):
             out = torch.zeros(sz[0], sz[1], self.out_channels, device=X.device)
             graph_data = Data(edge_index=edge_index, edge_attr=edge_weight, 
                                 train_mask=torch.arange(0, sz[1]), num_nodes=sz[1]).to('cpu')
-            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data')
+            cluster_data = ClusterData(graph_data, num_parts=50, recursive=False, save_dir='./data/cluster')
             loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
             for subgraph in loader:

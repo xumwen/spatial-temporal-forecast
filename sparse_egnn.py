@@ -110,3 +110,74 @@ class GatedGCNNet(nn.Module):
     def forward(self, X, edge_index, edge_weight):
         edge_feature = edge_weight.unsqueeze(-1)
         return self.gated(X, edge_index, edge_feature)
+
+
+class MyEGNNConv(MessagePassing):
+    def __init__(self, in_channels, out_channels, edge_channels, 
+                 **kwargs):
+        super(MyEGNNConv, self).__init__(aggr='add', **kwargs)
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.edge_channels = edge_channels
+        
+        self.value = nn.Parameter(torch.Tensor(in_channels, out_channels))
+        self.key = nn.Parameter(torch.Tensor(out_channels, out_channels))
+        self.query = nn.Parameter(torch.Tensor(out_channels, out_channels))
+        
+        self.weight_e = nn.Parameter(torch.Tensor(edge_channels, out_channels))
+        self.linear_att = nn.Linear(3 * out_channels, 1)
+        self.linear_concat = nn.Linear(2 * out_channels, out_channels)
+
+        self.layer_norm = nn.LayerNorm(normalized_shape=out_channels)
+        self.reset_parameters()
+    
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.value)
+        nn.init.xavier_uniform_(self.key)
+        nn.init.xavier_uniform_(self.query)
+        nn.init.xavier_uniform_(self.weight_e)
+
+
+    def forward(self, x, edge_index, edge_feature, size=None):
+        if torch.is_tensor(x):
+            x = torch.matmul(x, self.value)
+        else:
+            x = (None if x[0] is None else torch.matmul(x[0], self.value),
+                 None if x[1] is None else torch.matmul(x[1], self.value))
+
+        edge_emb = torch.matmul(edge_feature, self.weight_e)
+
+        return self.propagate(edge_index, size=size, x=x, edge_emb=edge_emb)
+
+    def message(self, x_j, x_i, edge_emb):
+        # cal att of shape [B, E, 1]
+        query = torch.matmul(x_j, self.query)
+        key = torch.matmul(x_i, self.key)
+        edge_emb = edge_emb.repeat(x_j.shape[0], 1, 1)
+
+        att_feature = torch.cat([key, query, edge_emb], dim=-1)
+        att = F.sigmoid(self.linear_att(att_feature))
+        # gate of shape [1, E, C]
+        gate = F.sigmoid(edge_emb)
+
+        return att * x_j * gate
+
+    def update(self, aggr_out, x):
+        if (isinstance(x, tuple) or isinstance(x, list)):
+            x = x[1]
+
+        aggr_out = self.linear_concat(torch.cat([x, aggr_out], dim=-1))
+        aggr_out = self.layer_norm(aggr_out)
+        
+        return x + F.relu(aggr_out)
+
+
+class MyEGNNNet(nn.Module):
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(MyEGNNNet, self).__init__()
+        self.egnn = MyEGNNConv(in_channels, out_channels, edge_channels=1, node_dim=1)
+    
+    def forward(self, X, edge_index, edge_weight):
+        edge_feature = edge_weight.unsqueeze(-1)
+        return self.egnn(X, edge_index, edge_feature)

@@ -52,7 +52,7 @@ class STGCNBlock(nn.Module):
     """
 
     def __init__(self, in_channels, spatial_channels, out_channels,
-                num_nodes, gcn_type, gcn_package, gcn_partition):
+                num_nodes, gcn_type, gcn_package, gcn_partition, skip_connection=False):
         """
         :param in_channels: Number of input features at each node in each time
         step.
@@ -63,6 +63,8 @@ class STGCNBlock(nn.Module):
         :param num_nodes: Number of nodes in the graph.
         """
         super(STGCNBlock, self).__init__()
+        self.skip_connection = skip_connection
+        self.spatial_channels = 2 * spatial_channels if self.skip_connection else spatial_channels
         self.temporal1 = TimeBlock(in_channels=in_channels,
                                    out_channels=out_channels)
         self.gcn = GCNUnit(in_channels=out_channels,
@@ -70,7 +72,7 @@ class STGCNBlock(nn.Module):
                             gcn_type=gcn_type,
                             gcn_package=gcn_package,
                             gcn_partition=gcn_partition)
-        self.temporal2 = TimeBlock(in_channels=spatial_channels,
+        self.temporal2 = TimeBlock(in_channels=self.spatial_channels,
                                    out_channels=out_channels)
         self.batch_norm = nn.BatchNorm2d(num_nodes)
 
@@ -85,9 +87,13 @@ class STGCNBlock(nn.Module):
         t1 = self.temporal1(X)
         # batch_size * timesteps -> batch_size
         t21 = t1.permute(0, 2, 1, 3).contiguous().view(-1, t1.shape[1], t1.shape[3])
-        t22 = F.relu(self.gcn(t21, A, edge_index, edge_weight, mode))
+        # batch_size * timesteps, num_nodes, out_channels
+        t22 = self.gcn(t21, A, edge_index, edge_weight, mode)
+        if self.skip_connection:
+            t22 = torch.cat((F.relu(t22),t22),dim=-1)
         # batch_size -> (batch_size, timesteps)
         t23 = t22.view(t1.shape[0], t1.shape[2], t22.shape[1], t22.shape[2]).permute(0, 2, 1, 3)
+        # batch_size, num_nodes, timesteps, out_channels
         t3 = self.temporal2(t23)
         
         return self.batch_norm(t3)
@@ -117,11 +123,13 @@ class STGCN(nn.Module):
         self.block1 = STGCNBlock(in_channels=num_features, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
                                  gcn_type=gcn_type, gcn_package=gcn_package,
-                                 gcn_partition=gcn_partition)
+                                 gcn_partition=gcn_partition,
+                                 skip_connection=True)
         self.block2 = STGCNBlock(in_channels=64, out_channels=64,
                                  spatial_channels=16, num_nodes=num_nodes,
                                  gcn_type=gcn_type, gcn_package=gcn_package,
-                                 gcn_partition=gcn_partition)
+                                 gcn_partition=gcn_partition,
+                                 skip_connection=False)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
         self.fully = nn.Linear(num_timesteps_input * 64,
                                num_timesteps_output)

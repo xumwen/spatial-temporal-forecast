@@ -20,7 +20,7 @@ from torch.utils.data.distributed import DistributedSampler
 from stgcn import STGCN
 from tgcn import TGCN
 from gwnet import GWNET
-from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
+from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, load_pems_m_data, load_pems_d7_data
 
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
@@ -34,20 +34,20 @@ parser.add_argument('--gpus', type=int, default=1,
                     help='Number of GPUs to use')
 parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'],
                     help='Choose Spatial-Temporal model', default='stgcn')
-parser.add_argument('-d', "--dataset", choices=["metr", "nyc-bike"],
+parser.add_argument('-d', "--dataset", choices=["metr", "nyc", "pems", "pems-m"],
                     help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn-type", 
                     choices=['normal', 'cheb', 'sage', 'graph', 'gat', 'egnn', 'sagela', 'gated', 'my'],
                     help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
                     help='Choose GCN implemented package',
-                    default='pyg')
+                    default='ours')
 parser.add_argument('-part', "--gcn-partition", choices=['cluster', 'sample'],
                     help='Choose GCN partition method',
                     default=None)
 parser.add_argument('-batchsize', type=int, default=64,
                     help='Training batch size')
-parser.add_argument('-epochs', type=int, default=1000,
+parser.add_argument('-epochs', type=int, default=100,
                     help='Training epochs')
 parser.add_argument('-l', '--loss-criterion', choices=['mse', 'mae'],
                     help='Choose loss criterion', default='mse')
@@ -197,25 +197,25 @@ if __name__ == '__main__':
 
     if args.dataset == "metr":
         A, X, means, stds = load_metr_la_data()
-    else:
+    elif args.dataset == "nyc":
         A, X, means, stds = load_nyc_sharing_bike_data()
+    elif args.dataset == "pems":
+        A, X, means, stds = load_pems_d7_data()
+    elif args.dataset == "pems-m":
+        A, X, means, stds = load_pems_m_data()
 
-    split_line1 = int(X.shape[2] * 0.6)
-    split_line2 = int(X.shape[2] * 0.8)
+    X, y = generate_dataset(X, 
+            num_timesteps_input=args.num_timesteps_input, 
+            num_timesteps_output=args.num_timesteps_output,
+            dataset = args.dataset
+            )
 
-    train_original_data = X[:, :, :split_line1]
-    val_original_data = X[:, :, split_line1:split_line2]
-    test_original_data = X[:, :, split_line2:]
+    split_line1 = int(X.shape[0] * 0.6)
+    split_line2 = int(X.shape[0] * 0.8)
 
-    training_input, training_target = generate_dataset(train_original_data,
-                                                       num_timesteps_input=num_timesteps_input,
-                                                       num_timesteps_output=num_timesteps_output)
-    val_input, val_target = generate_dataset(val_original_data,
-                                             num_timesteps_input=num_timesteps_input,
-                                             num_timesteps_output=num_timesteps_output)
-    test_input, test_target = generate_dataset(test_original_data,
-                                               num_timesteps_input=num_timesteps_input,
-                                               num_timesteps_output=num_timesteps_output)
+    training_input, training_target = X[:split_line1], y[:split_line1]
+    val_input, val_target = X[split_line1:split_line2], y[split_line1:split_line2]
+    test_input, test_target = X[split_line2:], y[split_line2:]
 
     A = torch.from_numpy(A)
     sparse_A = A.to_sparse()
@@ -247,7 +247,7 @@ if __name__ == '__main__':
     logger = TestTubeLogger(save_dir=log_dir, name=log_name)
 
     trainer = pl.Trainer(
-        gpus=gpus,
+        gpus=[1],
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,

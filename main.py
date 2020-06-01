@@ -25,7 +25,7 @@ from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_l
 
 parser = argparse.ArgumentParser(description='Spatial-Temporal-Model')
 parser.add_argument('--backend', choices=['dp', 'ddp'],
-                    help='Backend for data parallel', default='ddp')
+                    help='Backend for data parallel', default='dp')
 parser.add_argument('--log-name', type=str, default='default',
                     help='Experiment name to log')
 parser.add_argument('--log-dir', type=str, default='./logs',
@@ -37,7 +37,7 @@ parser.add_argument('-m', "--model", choices=['tgcn', 'stgcn', 'gwnet'],
 parser.add_argument('-d', "--dataset", choices=["metr", "nyc", "pems", "pems-m"],
                     help='Choose dataset', default='metr')
 parser.add_argument('-t', "--gcn-type", 
-                    choices=['normal', 'cheb', 'sage', 'graph', 'gat', 'egnn', 'sagela', 'gated', 'my'],
+                    choices=['normal', 'cheb', 'sage', 'graph', 'gat', 'egnn', 'sagela', 'gated', 'egnn'],
                     help='Choose GCN Conv Type', default='cheb')
 parser.add_argument('-p', "--gcn-package", choices=['pyg', 'ours'],
                     help='Choose GCN implemented package',
@@ -247,7 +247,7 @@ if __name__ == '__main__':
     logger = TestTubeLogger(save_dir=log_dir, name=log_name)
 
     trainer = pl.Trainer(
-        gpus=[1],
+        gpus=[3],
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,

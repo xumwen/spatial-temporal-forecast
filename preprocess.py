@@ -161,6 +161,12 @@ def load_metr_la_data(directory="data/METR-LA"):
 Load PeMS-M dataset
 """
 def load_pems_m_data(directory="data/PeMS-M"):
+    if (not os.path.isfile(directory + "/W_228.csv")
+            or not os.path.isfile(directory + "/V_228.csv")):
+        if os.path.isfile(directory + "/PeMS-M.zip"):
+            with zipfile.ZipFile(directory + "/PeMS-M.zip", 'r') as zip_ref:
+                zip_ref.extractall(directory)
+
     adj_path = directory + "/W_228.csv"
     A = np.loadtxt(adj_path, delimiter=',')
     A = A.astype(np.float32)

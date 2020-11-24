@@ -89,14 +89,14 @@ class WrapperNet(pl.LightningModule):
 
         self.hparams = hparams
         self.net = model(
-            hparams.num_nodes,
-            hparams.num_edges,
-            hparams.num_features,
-            hparams.num_timesteps_input,
-            hparams.num_timesteps_output,
-            hparams.gcn_type,
-            hparams.gcn_package,
-            hparams.gcn_partition
+            num_nodes=hparams.num_nodes,
+            num_edges=hparams.num_edges,
+            num_features=hparams.num_features,
+            num_timesteps_input=hparams.num_timesteps_input,
+            num_timesteps_output=hparams.num_timesteps_output,
+            gcn_type=hparams.gcn_type,
+            gcn_package=hparams.gcn_package,
+            gcn_partition=hparams.gcn_partition
         )
         self.register_buffer('A', torch.Tensor(
             hparams.num_nodes, hparams.num_nodes).float())
@@ -247,7 +247,7 @@ if __name__ == '__main__':
     logger = TestTubeLogger(save_dir=log_dir, name=log_name)
 
     trainer = pl.Trainer(
-        gpus=[3],
+        gpus=gpus,
         max_epochs=epochs,
         distributed_backend=backend,
         early_stop_callback=early_stop_callback,

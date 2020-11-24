@@ -53,7 +53,7 @@ class GWNET(nn.Module):
                  gcn_bool=True, addaptadj=True, aptinit=None, 
                  residual_channels=32, dilation_channels=32, 
                  skip_channels=256, end_channels=512,
-                 kernel_size=2, blocks=4, layers=2):
+                 kernel_size=2, blocks=4, layers=2, **kwargs):
         super(GWNET, self).__init__()
         self.dropout = dropout
         self.blocks = blocks
@@ -78,7 +78,7 @@ class GWNET(nn.Module):
             if aptinit is None:
                 self.nodevec1 = nn.Parameter(torch.randn(num_nodes, 10), requires_grad=True)
                 self.nodevec2 = nn.Parameter(torch.randn(10, num_nodes), requires_grad=True)
-                self.num_adj +=1
+                self.num_adj += 1
             else:
                 m, p, n = torch.svd(aptinit)
                 initemb1 = torch.mm(m[:, :10], torch.diag(p[:10] ** 0.5))
